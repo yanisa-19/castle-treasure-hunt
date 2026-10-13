@@ -27,6 +27,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 .ghost{position:fixed;z-index:7;pointer-events:none;transform:translate(-50%,-50%) rotate(-6deg) scale(1.12);box-shadow:0 14px 22px #000a}
 .held{opacity:.25}.used{visibility:hidden}
 .b{font:inherit;font-weight:700;font-size:1.1rem;background:var(--or);color:#2a1300;border:0;border-radius:12px;padding:12px 22px;box-shadow:0 4px 0 #b05a00;cursor:pointer}
+#hint{text-align:center;font-size:.95rem;color:#ffd9a8;margin-top:4px}
+#typebox{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:3vh}
+#opt{color:#ffd24a;font-weight:700;font-size:1.1rem}
+#ans{font:inherit;font-size:1.4rem;width:min(90%,360px);padding:10px;border-radius:12px;border:3px solid var(--or);background:#1d1033;color:#fff;text-align:center;-webkit-user-select:text;user-select:text;touch-action:auto}
+#kb{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:560px}
+.k{font:inherit;font-weight:700;font-size:1.1rem;min-width:36px;padding:8px 6px;background:#3b2468;color:#fff;border:2px solid var(--pur);border-radius:8px}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
 .card{max-width:560px;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
@@ -58,7 +64,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
   <div id="hud"><b id="hm"></b><span id="hq"></span><span id="hs">⭐ 0</span><span id="hk"></span></div>
   <div class="bar"><i id="tb"></i></div>
   <div id="q"></div>
+  <div id="hint"></div>
   <div id="notes"></div>
+  <div id="typebox" class="hide"><div id="opt"></div>
+    <input id="ans" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="พิมพ์คำตอบที่นี่...">
+    <div id="kb"></div><button class="b" id="chk">ตรวจคำตอบ ✔</button></div>
   <button class="b hide" id="clr">↺ Clear</button>
   <div class="stage" aria-hidden="true"><div id="hero" class="hero"></div></div>
 </div>
@@ -109,11 +119,14 @@ const M3 = [
 const HAND = "🖐️ จีบนิ้วโป้ง+นิ้วชี้ = จับธนบัตร เลื่อนไปที่ช่องว่าง แล้วปล่อยนิ้วเพื่อวาง";
 const MISSIONS = [
  {name:"The Chamber of the S-Eraser", data:M1, opts:[["+s","s"],["+es","es"],["no s/es","none"]],
-  how:"ต้องเติม s, es หรือไม่เติมอะไรเลย? เลือกธนบัตรคำตอบ"},
+  how:"ต้องเติม s, es หรือไม่เติมอะไรเลย? เลือกธนบัตรคำตอบ",
+  hint:"💡 คำใบ้: หลัง doesn't ไม่เติม s/es · กริยาลงท้าย ch, sh, o, s, x เติม es · นอกนั้นเติม s"},
  {name:"The Ultimate Master Chest", data:M2, letters:true,
-  how:"จับตัวอักษรไปเรียงที่ช่องว่างให้เป็นคำที่ถูกต้อง"},
- {name:"The Mirror of Illusion", data:M3,
-  how:"เลือกคำที่ถูกต้อง: don't / doesn't หรือ am not / isn't / aren't"}];
+  how:"จับตัวอักษรไปเรียงที่ช่องว่างให้เป็นคำที่ถูกต้อง",
+  hint:"💡 คำใบ้: He/She/It → doesn't · I/You/We/They → don't · is/are + not → isn't, aren't"},
+ {name:"The Mirror of Illusion", data:M3, typed:true,
+  how:"เลือกคำที่ถูกต้องระหว่าง don't / doesn't และ am not / isn't / aren't แล้วเขียนตอบ",
+  hint:"💡 คำใบ้: กริยาทั่วไป (like, eat) → don't/doesn't · คำคุณศัพท์/คำนาม/ที่อยู่ → am/is/are + not · He/She/It → doesn't, isn't"}];
 
 /* =====================================================
    สถานะเกม + ฟังก์ชันหลัก
@@ -134,7 +147,7 @@ function toast(t){ $("toast").textContent = t; $("toast").classList.remove("hide
 
 function intro(){
   const m = MISSIONS[S.m]; S.i = 0; S.streak = 0; S.mStart = S.score; S.locked = true; clearInterval(tm);
-  showOv("<h2>🎃 Mission "+(S.m+1)+"</h2><h2>"+m.name+"</h2><p>"+m.how+"</p><p>"+(handMode?HAND:"ลากธนบัตรไปวางที่ช่องว่าง")+"</p>", [["Start!", render]]);
+  showOv("<h2>🎃 Mission "+(S.m+1)+"</h2><h2>"+m.name+"</h2><p>"+m.how+"</p><p>"+(m.typed ? (handMode?"จีบนิ้วกดตัวอักษรบนคีย์บอร์ดหน้าจอ แล้วกดตรวจคำตอบ":"พิมพ์คำตอบแล้วกด Enter") : handMode?HAND:"ลากธนบัตรไปวางที่ช่องว่าง")+"</p>", [["Start!", render]]);
 }
 
 function render(){                      // แสดงโจทย์ข้อปัจจุบัน
@@ -143,7 +156,14 @@ function render(){                      // แสดงโจทย์ข้อ�
   $("hm").textContent = "M" + (S.m+1); $("hq").textContent = (S.i+1) + "/" + PER; hud();
   $("q").className = ""; $("q").innerHTML = q.q.replace("___", '<span id="slot" class="slot"></span>');
   $("clr").classList.toggle("hide", !m.letters);
+  $("hint").textContent = m.hint + (m.letters ? " · คำนี้มี "+q.a.length+" ตัว เริ่มด้วย "+q.a[0] : "");
+  const typed = !!m.typed; $("typebox").classList.toggle("hide", !typed); $("notes").classList.toggle("hide", typed);
   const box = $("notes"); box.innerHTML = "";
+  if (typed){                           // โหมดเขียนตอบ (Mission 3)
+    $("opt").textContent = "ตัวเลือก: " + q.o.join("  /  "); $("kb").classList.toggle("hide", !handMode);
+    const a = $("ans"); a.readOnly = handMode; a.value = ""; if (!handMode) setTimeout(()=>a.focus(), 50);
+    clearInterval(tm); tm = setInterval(tick, 100); return;
+  }
   let items;
   if (m.letters){ items = q.a.split(""); for (let k=0;k<5;k++){ const s = shuffle(items); items = s; if (s.join("") !== q.a) break; } items = items.map(l=>[l,l,"tile"]); }
   else items = shuffle(m.opts || q.o.map(t=>[t,t])).map(o=>[o[0],o[1],""]);
@@ -221,6 +241,20 @@ function place(n){
   if (m.letters){ S.placed += n.dataset.v; n.classList.add("used"); $("slot").textContent = S.placed; if (S.placed.length === q.a.length) submit(S.placed); }
   else { $("slot").textContent = n.textContent; submit(n.dataset.v); }
 }
+/* ระบบเขียนตอบ: ไม่สนตัวพิมพ์เล็กใหญ่และ apostrophe (dont = don't) */
+const norm = s => s.toLowerCase().replace(/[’‘`´']/g,"").replace(/\s+/g," ").trim();
+function setAns(v){ $("ans").value = v; $("slot").textContent = v; }
+function check(){
+  if (S.locked) return; const q = MISSIONS[S.m].data[S.i], v = $("ans").value; if (!norm(v)) return;
+  submit(norm(v) === norm(q.a) ? q.a : v);
+}
+$("chk").onclick = check;
+$("ans").addEventListener("input", () => setAns($("ans").value));
+$("ans").addEventListener("keydown", e => { if (e.key === "Enter") check(); });
+(function buildKb(){                    // คีย์บอร์ดบนจอ (ใช้ตอนเล่นด้วยมือ)
+  [..."qwertyuiopasdfghjklzxcvbnm'", "⌫"].forEach(k => { const b = document.createElement("button"); b.className = "k"; b.textContent = k;
+    b.onclick = () => { if (S.locked) return; setAns(k === "⌫" ? $("ans").value.slice(0,-1) : $("ans").value + k); }; $("kb").appendChild(b); });
+})();
 $("clr").onclick = () => { if (S.locked) return; S.placed=""; $("slot").textContent=""; document.querySelectorAll(".used").forEach(n=>n.classList.remove("used")); };
 addEventListener("pointerdown", e => { move(e.clientX,e.clientY); pressAt(false); });
 addEventListener("pointermove", e => move(e.clientX,e.clientY));
