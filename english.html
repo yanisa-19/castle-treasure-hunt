@@ -57,6 +57,15 @@ ol.lb li.me{color:var(--gold);font-weight:700}
 .chest{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
 .box{background:var(--stone2);font-size:2.4rem;padding:16px 0;border:3px solid var(--torch)}
 .box:disabled{border-color:transparent}
+.scene{position:relative;height:210px;margin:10px 0;background:linear-gradient(#2b2150,#3b3060);border-radius:14px;overflow:hidden}
+.tower{position:absolute;left:50%;bottom:0;width:70px;height:170px;margin-left:-35px;background:#5a4d8a;border:3px solid #150f26;border-bottom:0}
+.tower::before{content:"";position:absolute;top:-14px;left:-6px;right:-6px;height:14px;background:repeating-linear-gradient(90deg,#5a4d8a 0 12px,transparent 12px 20px)}
+.tower::after{content:"";position:absolute;top:50px;left:24px;width:16px;height:26px;background:#150f26;border-radius:8px 8px 0 0}
+.princess{position:absolute;left:50%;top:0;margin-left:-22px;font-size:2.6rem;line-height:1}
+.princess.saved{animation:descend 3.5s ease-in-out forwards}
+.princess.stuck{animation:waving 1s ease-in-out infinite}
+@keyframes descend{0%{transform:translate(0,0)}60%{transform:translate(0,160px)}100%{transform:translate(95px,160px)}}
+@keyframes waving{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
 .hide{display:none}
 @media (prefers-color-scheme:light){} /* castle theme is intentionally always dark */
 .mute{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:8px;z-index:10;background:#150f26;font-size:1.3rem;padding:8px 12px}
@@ -89,6 +98,7 @@ ol.lb li.me{color:var(--gold);font-weight:700}
   <p>An ancient castle is hiding treasure! Use your knowledge of <b>Present Simple (Negative)</b> to get through all 4 levels and unlock the treasure chest!</p>
   <p class="hint">You have 10 seconds per question. Wrong answers are okay! You get a tip every time, then move on.</p>
   <p class="hint">🎁 Get 2 correct in a row to open a random treasure box: empty, score ×2, or steal a friend's points!</p>
+  <p class="hint">👸 Goal: rescue the princess stuck in the tower! Answer more than 50% of the questions correctly to bring her down safely. If not, she stays up there!</p>
   <label for="name" class="muted">Adventurer name</label>
   <input id="name" maxlength="20" placeholder="Type your name" autocomplete="off">
   <button class="btn" id="goBtn">Start adventure</button>
@@ -123,6 +133,8 @@ ol.lb li.me{color:var(--gold);font-weight:700}
 <!-- RESULT -->
 <section id="end" class="card hide">
   <h1 id="eTitle"></h1>
+  <div class="scene" aria-hidden="true"><div class="tower"></div><div id="princess" class="princess">👸</div></div>
+  <p id="rescueMsg"><b></b></p>
   <p id="eSummary"></p>
   <h2>🏆 Leaderboard</h2>
   <ol class="lb" id="lb"></ol>
@@ -143,6 +155,7 @@ const BOSS_BONUS        = 100;  // boss bonus
 const BOSS_TARGET       = 3;    // boss answers needed to open the chest (use 2 for easier)
 const TYPE_EXTRA_TIME   = 0;    // extra seconds for typing questions
 const CHEST_STREAK      = 2;    // correct answers in a row to open a random chest
+const RESCUE_PERCENT    = 50;   // rescue the princess if correct answers are MORE than this percent
 const STEAL_AMOUNT      = 30;   // points stolen from a friend
 /* รูปแบบการตอบของแต่ละข้อ (เรียงข้อ 1-15)
    "drag" = ลากคำตอบไปวางในช่องว่าง, "type" = พิมพ์ตอบ, "choice" = เลือกตัวเลือก */
@@ -415,7 +428,7 @@ function next(){
 }
 
 function finish(){
-  stopMusic(); curMusic = -1; sfx("win");
+  stopMusic(); curMusic = -1;
   S.bossOpen = S.bossRight >= BOSS_TARGET;
   if (S.bossOpen) S.coins += BOSS_BONUS;
   saveScore();
@@ -429,6 +442,13 @@ function finish(){
     (S.gems?"<span class='reward'>💎 ×"+S.gems+"</span>":"") +
     (S.shields?"<span class='reward'>🛡️ ×"+S.shields+"</span>":"");
   renderBoard();
+  /* Princess rescue: saved only if correct % is MORE than RESCUE_PERCENT */
+  const pct = Math.round(S.correct / QUESTIONS.length * 100), saved = pct > RESCUE_PERCENT;
+  $("princess").className = "princess " + (saved ? "saved" : "stuck");
+  $("rescueMsg").textContent = saved
+    ? "👸 You saved the princess! (" + pct + "% correct) She climbs safely down the tower!"
+    : "🆘 " + pct + "% correct. You need more than " + RESCUE_PERCENT + "% to rescue her. The princess is still stuck in the tower. Try again!";
+  sfx(saved ? "win" : "no");
   show("end");
 }
 
