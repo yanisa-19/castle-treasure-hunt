@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Castle Treasure Hunt – Present Simple Negative</title>
+<link href="https://fonts.googleapis.com/css2?family=Mali:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#1d1633; --stone:#2c2347; --stone2:#3b3060; --text:#f6efe0;
+  --torch:#ffb347; --gold:#ffd24a; --good:#5fd38d; --bad:#ff8a7a; --muted:#b9acd6;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(ellipse at 50% 0%,#3a2a66 0%,var(--bg) 60%) fixed;color:var(--text);
+  font-family:"Mali","Sarabun","Noto Sans Thai",system-ui,sans-serif;font-size:17px;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:16px}
+.card{background:var(--stone);border:3px solid var(--stone2);border-radius:18px;padding:20px;
+  box-shadow:0 6px 0 #150f26}
+h1{font-size:2rem;margin:.2em 0;color:var(--torch);line-height:1.2}
+h2{font-size:1.35rem;margin:.2em 0;color:var(--torch)}
+p{margin:.5em 0}
+.muted{color:var(--muted)}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;color:inherit}
+button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.btn{background:var(--torch);color:#2a1a00;font-weight:700;padding:12px 22px;font-size:1.05rem;box-shadow:0 4px 0 #b36d12}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #b36d12}
+input{font:inherit;width:100%;padding:12px;border-radius:12px;border:3px solid var(--stone2);background:#1d1633;color:var(--text);margin:10px 0}
+.hud{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;font-weight:600;margin-bottom:10px}
+.pill{background:#150f26;border-radius:999px;padding:4px 12px;font-size:.95rem}
+.bar{height:12px;background:#150f26;border-radius:99px;overflow:hidden;margin:8px 0 16px}
+.bar>i{display:block;height:100%;width:100%;background:var(--good);transition:background .3s}
+.q{font-size:1.5rem;font-weight:700;margin:6px 0 16px;line-height:1.35}
+.hint{font-size:.95rem;color:var(--muted)}
+.opts{display:grid;gap:10px}
+.opt{background:var(--stone2);padding:14px;font-size:1.1rem;text-align:left;border:3px solid transparent;font-weight:600}
+.opt:hover:not(:disabled){border-color:var(--torch)}
+.opt.right{background:#1f6b45;border-color:var(--good)}
+.opt.wrong{background:#6b2f2a;border-color:var(--bad)}
+.opt:disabled{cursor:default}
+.fb{margin-top:14px;padding:12px;border-radius:12px;background:#150f26}
+.reward{display:inline-block;background:#150f26;border-radius:12px;padding:6px 12px;margin:4px 4px 0 0}
+ol.lb{padding-left:1.4em;margin:.5em 0}
+ol.lb li{padding:4px 0}
+ol.lb li.me{color:var(--gold);font-weight:700}
+.hide{display:none}
+@media (prefers-color-scheme:light){} /* castle theme is intentionally always dark */
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+
+<!-- START SCREEN -->
+<section id="start" class="card">
+  <h1>🏰 Castle Treasure Hunt</h1>
+  <p>ปราสาทโบราณซ่อนสมบัติไว้! ใช้ความรู้เรื่อง <b>Present Simple (Negative)</b> ผ่านทั้ง 4 ด่านเพื่อเปิดหีบสมบัติ</p>
+  <p class="hint">ตอบแต่ละข้อภายใน 10 วินาที ตอบผิดไม่เป็นไร! จะมีคำใบ้ให้ทุกข้อ แล้วไปลุยข้อต่อไปได้เลย</p>
+  <label for="name" class="muted">ชื่อนักผจญภัย</label>
+  <input id="name" maxlength="20" placeholder="พิมพ์ชื่อของเธอ" autocomplete="off">
+  <button class="btn" id="goBtn">เริ่มผจญภัย</button>
+</section>
+
+<!-- LEVEL INTRO -->
+<section id="intro" class="card hide">
+  <h2 id="iTitle"></h2>
+  <p id="iMission"></p>
+  <p id="iReward" class="muted"></p>
+  <button class="btn" id="introBtn">ไปกันเลย</button>
+</section>
+
+<!-- QUESTION -->
+<section id="play" class="card hide">
+  <div class="hud">
+    <span class="pill" id="hLevel"></span>
+    <span class="pill" id="hCoins">🪙 0</span>
+    <span class="pill" id="hItems"></span>
+  </div>
+  <div class="bar" aria-hidden="true"><i id="timer"></i></div>
+  <div class="hint" id="qHint"></div>
+  <div class="q" id="qText"></div>
+  <div class="opts" id="opts"></div>
+  <div class="fb hide" id="fb"></div>
+  <p><button class="btn hide" id="nextBtn">ต่อไป</button></p>
+</section>
+
+<!-- RESULT -->
+<section id="end" class="card hide">
+  <h1 id="eTitle"></h1>
+  <p id="eSummary"></p>
+  <h2>🏆 Leaderboard</h2>
+  <ol class="lb" id="lb"></ol>
+  <p class="hint">อันดับนี้เก็บไว้ในเบราว์เซอร์เครื่องนี้</p>
+  <button class="btn" id="againBtn">เล่นอีกครั้ง</button>
+</section>
+
+</main>
+
+<script>
+/* =====================================================
+   ส่วนตั้งค่าสำหรับครู (แก้ไขได้ที่นี่)
+   ===================================================== */
+const TIME_PER_QUESTION = 10;   // วินาทีต่อข้อ
+const COINS_PER_CORRECT = 20;   // เหรียญต่อข้อที่ตอบถูก
+const GEM_MULTIPLIER    = 2;    // ด่าน 2: ตอบถูกได้ S-Eraser Gem คูณเหรียญของข้อนั้น
+const BOSS_BONUS        = 100;  // โบนัสด่านบอส
+const BOSS_TARGET       = 3;    // ต้องตอบบอสถูกกี่ข้อถึงเปิดหีบ (ลดเป็น 2 ถ้าต้องการให้ง่ายขึ้น)
+
+/* ข้อมูลด่าน: ชื่อ ภารกิจ และรางวัล */
+const LEVELS = [
+  { name:"ด่าน 1: The Guarded Gate (ประตูยามเฝ้า)",
+    mission:"ยามเฝ้าประตูถือกุญแจดอกแรกไว้ เลือก don't หรือ doesn't ให้ถูกเพื่อรับกุญแจ!",
+    reward:"🗝️ Silver Key + 🪙 20 Gold Coins ต่อข้อ", hint:"เลือก don't หรือ doesn't" },
+  { name:"ด่าน 2: The Chamber of the S-Eraser (ห้องศิลากลืนตัว S)",
+    mission:"ประโยคบนแท่นหินติดคำสาปตัว -s/-es! เลือกประโยคที่ปลดคำสาปแล้ว",
+    reward:"💎 S-Eraser Gem คูณเหรียญของข้อนั้น ×2", hint:"หลัง doesn't ใช้กริยาช่องเดิม ไม่เติม s/es" },
+  { name:"ด่าน 3: The Mirror of Illusion (กระจกเงาลวงตา)",
+    mission:"กระจกลวงตาให้เลือกระหว่าง don't/doesn't กับ am/is/are + not จงเลือกให้ถูก!",
+    reward:"🛡️ Shield of Truth (ใช้กันเพื่อนขโมยแต้ม)", hint:"Verb to be (am/is/are) + not  /  กริยาทั่วไป + don't/doesn't" },
+  { name:"ด่านบอส: The Ultimate Master Chest (หีบสมบัติโบราณ)",
+    mission:"หีบสมบัติโชว์ 3 ประโยค หาประโยคที่เป็น \"คำสาป\" (ประโยคที่ผิด) ให้เจอ!",
+    reward:"🏆 Mega Treasure + 🪙 100 Gold Coins", hint:"หาประโยคที่ผิด" }
+];
+
+/* โจทย์ทั้งหมด: level = ด่าน (0-3), text = โจทย์, options = ตัวเลือก,
+   answer = ลำดับคำตอบที่ถูก (เริ่มที่ 0), tip = คำอธิบายหลังตอบ
+   ตัวเลือกจะถูกสลับตำแหน่งอัตโนมัติ */
+const QUESTIONS = [
+  // ---- ด่าน 1 ----
+  { level:0, text:"He ______ have the key!", options:["don't","doesn't"], answer:1,
+    tip:"He เป็นเอกพจน์ → ใช้ doesn't" },
+  { level:0, text:"They ______ open the gate at night.", options:["don't","doesn't"], answer:0,
+    tip:"They เป็นพหูพจน์ → ใช้ don't" },
+  { level:0, text:"The guard ______ sleep at work.", options:["don't","doesn't"], answer:1,
+    tip:"The guard = he → ใช้ doesn't" },
+  { level:0, text:"We ______ see any monsters here.", options:["don't","doesn't"], answer:0,
+    tip:"We → ใช้ don't" },
+  // ---- ด่าน 2 ----
+  { level:1, text:"She doesn't likes ghost.", options:["She doesn't like ghost.","She don't like ghost.","She doesn't likes ghost."], answer:0,
+    tip:"หลัง doesn't ต้องปลด -s ออก → like" },
+  { level:1, text:"He doesn't opens the door.", options:["He doesn't open the door.","He don't open the door.","He doesn't opens the door."], answer:0,
+    tip:"หลัง doesn't ใช้ open (ไม่เติม s)" },
+  { level:1, text:"The dragon doesn't eats gold.", options:["The dragon doesn't eat gold.","The dragon don't eat gold.","The dragon doesn't eats gold."], answer:0,
+    tip:"หลัง doesn't ใช้ eat (ไม่เติม s)" },
+  { level:1, text:"My cat doesn't watches the moon.", options:["My cat doesn't watch the moon.","My cat don't watch the moon.","My cat doesn't watches the moon."], answer:0,
+    tip:"ปลด -es ออก → watch" },
+  // ---- ด่าน 3 ----
+  { level:2, text:"I ______ scared of the dark.", options:["am not","don't"], answer:0,
+    tip:"scared เป็นคุณศัพท์ → ใช้ am not" },
+  { level:2, text:"She ______ a witch.", options:["isn't","doesn't"], answer:0,
+    tip:"a witch เป็นคำนาม ตามหลัง is → isn't" },
+  { level:2, text:"They ______ happy today.", options:["aren't","don't"], answer:0,
+    tip:"happy เป็นคุณศัพท์ → aren't" },
+  { level:2, text:"We ______ like cold soup.", options:["aren't","don't"], answer:1,
+    tip:"like เป็นกริยาทั่วไป → don't" },
+  // ---- ด่านบอส ----
+  { level:3, text:"หาประโยคที่ผิด (คำสาป)!", options:["We don't live in the castle.","He doesn't open the door.","She doesn't goes home."], answer:2,
+    tip:"She doesn't goes ❌ → She doesn't go ✅ (ลืมปลด -es)" },
+  { level:3, text:"หาประโยคที่ผิด (คำสาป)!", options:["The bird doesn't flies.","I don't have a sword.","They don't play here."], answer:0,
+    tip:"The bird doesn't flies ❌ → The bird doesn't fly ✅" },
+  { level:3, text:"หาประโยคที่ผิด (คำสาป)!", options:["The king doesn't like noise.","My friends don't know the way.","It doesn't has a lock."], answer:2,
+    tip:"It doesn't has ❌ → It doesn't have ✅" }
+];
+
+/* =====================================================
+   ตัวเกม (ปกติไม่ต้องแก้)
+   ===================================================== */
+const $ = id => document.getElementById(id);
+const show = id => ["start","intro","play","end"].forEach(s => $(s).classList.toggle("hide", s !== id));
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+
+let S;            // สถานะเกม
+let qIndex, timerId, locked, playerName = "";
+
+function newGame(){
+  S = { coins:0, silverKey:false, gems:0, shields:0, bossRight:0, bossOpen:false, correct:0, levelCorrect:[0,0,0,0] };
+  qIndex = 0;
+}
+
+function showIntro(level){
+  const L = LEVELS[level];
+  $("iTitle").textContent = L.name;
+  $("iMission").textContent = L.mission;
+  $("iReward").textContent = "รางวัล: " + L.reward;
+  show("intro");
+}
+
+function updateHud(level){
+  $("hLevel").textContent = "ข้อ " + (qIndex+1) + "/" + QUESTIONS.length;
+  $("hCoins").textContent = "🪙 " + S.coins;
+  $("hItems").textContent = (S.silverKey?"🗝️ ":"") + (S.gems?"💎×"+S.gems+" ":"") + (S.shields?"🛡️×"+S.shields:"");
+}
+
+function showQuestion(){
+  const q = QUESTIONS[qIndex];
+  locked = false;
+  $("qHint").textContent = LEVELS[q.level].hint;
+  $("qText").textContent = q.text;
+  $("fb").classList.add("hide");
+  $("nextBtn").classList.add("hide");
+  const box = $("opts"); box.innerHTML = "";
+  shuffle(q.options.map((t,i)=>({t, ok:i===q.answer}))).forEach(o=>{
+    const b = document.createElement("button");
+    b.className = "opt"; b.textContent = o.t; b.dataset.ok = o.ok ? "1" : "0";
+    b.onclick = () => answer(b, o.ok);
+    box.appendChild(b);
+  });
+  updateHud();
+  show("play");
+  startTimer();
+}
+
+function startTimer(){
+  clearInterval(timerId);
+  const bar = $("timer"), t0 = Date.now();
+  bar.style.transition = "none"; bar.style.width = "100%"; bar.style.background = "var(--good)";
+  timerId = setInterval(()=>{
+    const left = 1 - (Date.now()-t0)/(TIME_PER_QUESTION*1000);
+    bar.style.width = Math.max(left,0)*100 + "%";
+    if (left < .35) bar.style.background = "var(--torch)";
+    if (left <= 0){ clearInterval(timerId); answer(null,false,true); }
+  }, 100);
+}
+
+function answer(btn, ok, timeout){
+  if (locked) return; locked = true; clearInterval(timerId);
+  const q = QUESTIONS[qIndex], lv = q.level;
+  document.querySelectorAll(".opt").forEach(b=>{
+    b.disabled = true;
+    if (b.dataset.ok==="1") b.classList.add("right");
+  });
+  let msg = "";
+  if (ok){
+    S.correct++; S.levelCorrect[lv]++;
+    let gain = COINS_PER_CORRECT;
+    msg = "✅ เก่งมาก! +" + COINS_PER_CORRECT + " 🪙";
+    if (lv===0){ if(!S.silverKey) msg += " ได้ 🗝️ Silver Key!"; S.silverKey = true; }
+    if (lv===1){ S.gems++; gain *= GEM_MULTIPLIER; msg = "✅ ปลดคำสาป! ได้ 💎 S-Eraser Gem ×" + GEM_MULTIPLIER + " → +" + gain + " 🪙"; }
+    if (lv===2){ S.shields++; msg += " ได้ 🛡️ Shield of Truth!"; }
+    if (lv===3){ S.bossRight++; msg = "✅ เจอคำสาปแล้ว!"; }
+    S.coins += gain;
+  } else {
+    if (btn) btn.classList.add("wrong");
+    msg = (timeout ? "⏰ หมดเวลา ไม่เป็นไร! " : "ยังไม่ถูก ไม่เป็นไรนะ ") + "ลองดูคำอธิบายแล้วไปต่อกัน 💪";
+  }
+  const fb = $("fb");
+  fb.textContent = msg + "  💡 " + q.tip;
+  fb.classList.remove("hide");
+  updateHud();
+  const last = qIndex === QUESTIONS.length-1;
+  $("nextBtn").textContent = last ? "เปิดหีบสมบัติ!" : "ต่อไป";
+  $("nextBtn").classList.remove("hide");
+  $("nextBtn").focus();
+}
+
+function next(){
+  const prevLevel = QUESTIONS[qIndex].level;
+  qIndex++;
+  if (qIndex >= QUESTIONS.length) return finish();
+  const lv = QUESTIONS[qIndex].level;
+  if (lv !== prevLevel) showIntro(lv); else showQuestion();
+}
+
+function finish(){
+  S.bossOpen = S.bossRight >= BOSS_TARGET;
+  if (S.bossOpen) S.coins += BOSS_BONUS;
+  saveScore();
+  $("eTitle").textContent = S.bossOpen ? "🎉 เปิดหีบสำเร็จ!" : "🏰 จบการผจญภัย!";
+  $("eSummary").innerHTML =
+    (S.bossOpen ? "คุณได้ <b>Mega Treasure</b> + " + BOSS_BONUS + " 🪙<br>"
+                : "หีบยังไม่เปิด (ตอบบอสถูก " + S.bossRight + "/" + BOSS_TARGET + " ข้อ) ลองใหม่อีกครั้งนะ!<br>") +
+    "ตอบถูก " + S.correct + "/" + QUESTIONS.length + " ข้อ<br>" +
+    "<span class='reward'>🪙 " + S.coins + "</span>" +
+    (S.silverKey?"<span class='reward'>🗝️ Silver Key</span>":"") +
+    (S.gems?"<span class='reward'>💎 ×"+S.gems+"</span>":"") +
+    (S.shields?"<span class='reward'>🛡️ ×"+S.shields+"</span>":"");
+  renderBoard();
+  show("end");
+}
+
+/* Leaderboard: เก็บใน localStorage (ถ้าใช้ไม่ได้จะเก็บในหน่วยความจำ) */
+let memBoard = [];
+function loadBoard(){
+  try { return JSON.parse(localStorage.getItem("castleBoard")||"[]"); } catch(e){ return memBoard; }
+}
+function saveScore(){
+  const b = loadBoard(); b.push({name:playerName, score:S.coins, t:Date.now()});
+  b.sort((x,y)=>y.score-x.score); const top = b.slice(0,10);
+  memBoard = top;
+  try { localStorage.setItem("castleBoard", JSON.stringify(top)); } catch(e){}
+  S.lastT = b.find(x=>x.t===top.find(y=>y.name===playerName&&y.score===S.coins)?.t)?.t;
+}
+function renderBoard(){
+  const ol = $("lb"); ol.innerHTML = "";
+  let marked = false;
+  loadBoard().forEach(e=>{
+    const li = document.createElement("li");
+    li.textContent = e.name + " — " + e.score + " 🪙";
+    if (!marked && e.name===playerName && e.score===S.coins){ li.className="me"; li.textContent += " ⭐ คุณ"; marked = true; }
+    ol.appendChild(li);
+  });
+}
+
+/* ปุ่มต่างๆ */
+$("goBtn").onclick = () => {
+  playerName = $("name").value.trim() || "นักผจญภัย";
+  newGame(); showIntro(0);
+};
+$("name").addEventListener("keydown", e => { if (e.key==="Enter") $("goBtn").click(); });
+$("introBtn").onclick = showQuestion;
+$("nextBtn").onclick = next;
+$("againBtn").onclick = () => show("start");
+</script>
+</body>
+</html>
