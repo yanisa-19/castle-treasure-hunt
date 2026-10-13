@@ -11,11 +11,11 @@
 *{box-sizing:border-box;-webkit-user-select:none;user-select:none;touch-action:none}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:"Sarabun","Noto Sans Thai",system-ui,sans-serif}
 #cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:.5}
-#shade{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0,#5a2d9acc,#120a1fe6)}
+#shade{position:fixed;inset:0;background:radial-gradient(ellipse at 15% 0,#7b2cbfd0,transparent 55%),radial-gradient(ellipse at 95% 35%,#ff6b9a66,transparent 50%),radial-gradient(ellipse at 10% 100%,#1fb6c966,transparent 55%),#120a1fee}
 #ui{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px calc(env(safe-area-inset-bottom,0px) + 6px)}
 #hud{display:flex;justify-content:space-between;gap:8px;font-weight:700;font-size:1rem}
 #hud span,#hud b{background:#0008;border-radius:99px;padding:3px 12px}
-.bar{height:12px;background:#0008;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;width:100%;background:var(--g)}
+.bar{height:12px;background:#0008;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#3ddc84,#4cc9f0,#c77dff)}
 #q{margin-top:5vh;text-align:center;font-weight:700;font-size:clamp(1.4rem,5vw,2.3rem);line-height:1.4;text-shadow:0 2px 8px #000}
 #q.ok{color:var(--g)}
 .slot{display:inline-block;min-width:3.4em;min-height:1.3em;border-bottom:4px dashed var(--or);color:#ffd24a;padding:0 8px;vertical-align:bottom}
@@ -38,6 +38,24 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 .rank th,.rank td{padding:6px 8px;border-bottom:1px solid var(--pur);text-align:left}
 .rank td:last-child,.rank th:last-child{text-align:right}
 .rank tr.me{background:#ff8a1f33;font-weight:700}
+/* ===== สีสัน ===== */
+#hm{background:linear-gradient(90deg,#ff8a1f,#ffb347);color:#2a1300}
+#hq{background:#1fb6c9cc;color:#02272c}
+#hs{background:#ffd24acc;color:#3a2a00}
+#hk{background:#ff6b9acc}
+#q{text-shadow:0 0 14px #c77dff,0 2px 6px #000}
+.slot{border-bottom-color:#4cc9f0}
+.note.c1{background:linear-gradient(135deg,#fff0b3,#ffb347);border-color:#b36d12;box-shadow:0 4px 0 #b36d12;color:#4a2a00}
+.note.c2{background:linear-gradient(135deg,#ffd0dc,#ff6b9a);border-color:#a8335b;box-shadow:0 4px 0 #a8335b;color:#4a0d24}
+.note.c3{background:linear-gradient(135deg,#c9ecff,#4cc9f0);border-color:#1b7d98;box-shadow:0 4px 0 #1b7d98;color:#032a36}
+.note.c4{background:linear-gradient(135deg,#e6d4ff,#a56bff);border-color:#5b2fb0;box-shadow:0 4px 0 #5b2fb0;color:#21083f}
+.k:nth-child(5n+1){background:#7c3aed}.k:nth-child(5n+2){background:#db2777}.k:nth-child(5n+3){background:#0891b2}.k:nth-child(5n+4){background:#d97706}.k:nth-child(5n){background:#059669}
+.card{border-color:#c77dff;box-shadow:0 0 26px #c77dff88,0 8px 0 #0b0614}
+.card h1,.card h2{background:linear-gradient(90deg,#ff8a1f,#ffd24a,#3ddc84,#4cc9f0,#c77dff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.b{background:linear-gradient(180deg,#ffc15e,#ff8a1f)}
+.rank tr:nth-child(2) td{background:#ffd24a40}.rank tr:nth-child(3) td{background:#cfd8e540}.rank tr:nth-child(4) td{background:#cd7f3240}
+.fl{position:fixed;bottom:0;z-index:2;opacity:.55;pointer-events:none;animation:rise linear infinite}
+@keyframes rise{from{transform:translateY(0) rotate(0)}to{transform:translateY(-115vh) rotate(360deg)}}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
 .card{max-width:560px;max-height:92vh;overflow:auto;touch-action:pan-y;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
@@ -172,14 +190,14 @@ function render(){                      // แสดงโจทย์ข้อ�
   let items;
   if (m.letters){ items = q.a.split(""); for (let k=0;k<5;k++){ const s = shuffle(items); items = s; if (s.join("") !== q.a) break; } items = items.map(l=>[l,l,"tile"]); }
   else items = shuffle(m.opts || q.o.map(t=>[t,t])).map(o=>[o[0],o[1],""]);
-  items.forEach(([label,val,cls]) => { const n = document.createElement("div"); n.className = "note "+cls; n.textContent = label; n.dataset.v = val; box.appendChild(n); });
+  items.forEach(([label,val,cls],ix) => { const n = document.createElement("div"); n.className = "note "+cls+" c"+(ix%5); n.textContent = label; n.dataset.v = val; box.appendChild(n); });
   clearInterval(tm); tm = setInterval(tick, 100);
 }
 function tick(){                        // นับเวลา 15 วินาที
   if (S.locked) return;
   const left = TIME - (performance.now() - S.t0)/1000;
   $("tb").style.width = Math.max(left,0)/TIME*100 + "%";
-  $("tb").style.background = left < 5 ? "#ff6b6b" : "var(--g)";
+  $("tb").style.background = left < 5 ? "linear-gradient(90deg,#ff6b6b,#ff8a1f)" : "linear-gradient(90deg,#3ddc84,#4cc9f0,#c77dff)";
   if (left < 3 && Math.ceil(left) !== S.sec){ S.sec = Math.ceil(left); beep(990,0,.08); }
   if (left <= 0) timeout();
 }
@@ -316,7 +334,8 @@ async function loop(){ if (!handMode) return; if (cam.readyState >= 2){ try { aw
 const fx = $("fx"), c = fx.getContext("2d"), PT = [];
 const CON = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 function fit(){ fx.width = innerWidth; fx.height = innerHeight; } addEventListener("resize", fit); fit();
-function burst(x,y,col){ for (let i=0;i<28;i++) PT.push({x,y,vx:(Math.random()-.5)*9,vy:Math.random()*-8,l:1,col}); }
+const PAL = ["#ff8a1f","#ffd24a","#3ddc84","#4cc9f0","#c77dff","#ff6b9a"];   // สีพลุ
+function burst(x,y){ for (let i=0;i<44;i++) PT.push({x,y,vx:(Math.random()-.5)*10,vy:Math.random()*-9,l:1,col:PAL[i%6]}); }
 function draw(){
   c.clearRect(0,0,fx.width,fx.height);
   if (handMode && LM){
@@ -327,7 +346,7 @@ function draw(){
     if (P.down){ c.fillStyle = "#3ddc8899"; c.fill(); }
   }
   for (let i=PT.length-1;i>=0;i--){ const p = PT[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=.35; p.l-=.02;
-    if (p.l<=0){ PT.splice(i,1); continue; } c.globalAlpha = p.l; c.fillStyle = p.col; c.fillRect(p.x,p.y,6,6); }
+    if (p.l<=0){ PT.splice(i,1); continue; } c.globalAlpha = p.l; c.fillStyle = p.col; c.fillRect(p.x,p.y,7,7); }
   c.globalAlpha = 1; requestAnimationFrame(draw);
 }
 draw();
@@ -360,6 +379,10 @@ function sfx(k){
 function hero(cls){ const el = $("hero"); el.classList.remove("jump","shake"); void el.offsetWidth; el.classList.add(cls); el.onanimationend = () => el.classList.remove("jump","shake"); }
 
 /* หน้าเริ่มเกม */
+(function floaters(){                  // ไอคอนฮาโลวีนลอยขึ้นด้านหลัง
+  ["🎃","👻","🦇","🕷️","🍬","🌙","⭐","🧙","🍭","🕸️","💀","🍎"].forEach((e,i) => { const f = document.createElement("div"); f.className = "fl"; f.textContent = e;
+    f.style.cssText = "left:"+(i*8.5+2)+"%;font-size:"+(1.4+(i%3)*.6)+"rem;animation-duration:"+(14+(i*7)%11)+"s;animation-delay:-"+(i*3)%14+"s"; document.body.appendChild(f); });
+})();
 function startScreen(){
   const go = cam => () => { PLAYER = $("pn").value.trim() || "Player " + (loadBoard().length + 1); audio(); if (cam && !handMode) startCam(); intro(); };
   showOv('<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 Missions · 8 ข้อต่อ Mission · 15 วินาทีต่อข้อ</p><input id="pn" class="pn" maxlength="16" placeholder="Your name"><p>เลือกวิธีเล่น</p>',
