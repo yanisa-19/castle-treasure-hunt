@@ -33,9 +33,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 #ans{font:inherit;font-size:1.4rem;width:min(90%,360px);padding:10px;border-radius:12px;border:3px solid var(--or);background:#1d1033;color:#fff;text-align:center;-webkit-user-select:text;user-select:text;touch-action:auto}
 #kb{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:560px}
 .k{font:inherit;font-weight:700;font-size:1.1rem;min-width:36px;padding:8px 6px;background:#3b2468;color:#fff;border:2px solid var(--pur);border-radius:8px}
+.pn{font:inherit;font-size:1.2rem;width:min(100%,280px);padding:10px;border-radius:12px;border:3px solid var(--or);background:#1d1033;color:#fff;text-align:center;-webkit-user-select:text;user-select:text;touch-action:auto}
+.rank{width:100%;border-collapse:collapse;margin-top:8px;font-size:1.05rem}
+.rank th,.rank td{padding:6px 8px;border-bottom:1px solid var(--pur);text-align:left}
+.rank td:last-child,.rank th:last-child{text-align:right}
+.rank tr.me{background:#ff8a1f33;font-weight:700}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
-.card{max-width:560px;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
+.card{max-width:560px;max-height:92vh;overflow:auto;touch-action:pan-y;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
 .card h1,.card h2{margin:.2em 0;color:var(--or)}.card p{margin:.5em 0;font-size:1.1rem}
 .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
 #toast{position:fixed;z-index:6;top:calc(env(safe-area-inset-top,0px) + 52px);left:50%;transform:translateX(-50%);background:#000b;border-radius:99px;padding:4px 14px;font-size:.9rem}
@@ -195,8 +200,22 @@ function next(){
   if (S.i < PER) return render();
   clearInterval(tm); S.locked = true;
   if (S.m < MISSIONS.length-1) showOv("<h2>🎉 Mission "+(S.m+1)+" complete!</h2><p>⭐ "+S.score+"</p>", [["Next mission ▶", ()=>{S.m++; intro();}]]);
-  else { const msg = S.score >= 150 ? "เก่งมาก! เป็นจอมเวทไวยากรณ์แล้ว 🧙" : "ทำได้ดีมาก! ลองเล่นอีกครั้งเพื่อเก็บดาวเพิ่มนะ 💪";
-    showOv("<h1>🏆 Halloween Master!</h1><p>⭐ "+S.score+" points</p><p>"+msg+"</p>", [["Play again ↺", ()=>{S.m=0; S.score=0; intro();}]]); }
+  else finish();
+}
+/* ===== สรุปอันดับตอนจบ (ภาษาอังกฤษ) เก็บใน localStorage ของเครื่องนี้ ===== */
+let PLAYER = "Player", memBoard = [];
+const esc = t => t.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+function loadBoard(){ try { return JSON.parse(localStorage.getItem("hwBoard") || "[]"); } catch(e){ return memBoard; } }
+function finish(){
+  const b = loadBoard(), me = {name:PLAYER, score:S.score, t:Date.now()};
+  b.push(me); b.sort((x,y) => y.score - x.score || x.t - y.t);
+  const list = b.slice(0,30); memBoard = list; try { localStorage.setItem("hwBoard", JSON.stringify(list)); } catch(e){}
+  const place = list.findIndex(e => e.t === me.t) + 1, medal = ["🥇","🥈","🥉"];
+  const rows = list.slice(0,10).map((e,i) => "<tr"+(e.t===me.t?' class="me"':"")+"><td>"+(medal[i]||(i+1))+"</td><td>"+esc(e.name)+"</td><td>"+e.score+"</td></tr>").join("");
+  const msg = S.score >= 150 ? "Amazing! You are a grammar wizard 🧙" : "Great job! Play again to collect more stars 💪";
+  showOv("<h1>🏆 Final Ranking</h1><p>"+esc(PLAYER)+": place #"+(place||"-")+" · ⭐ "+S.score+" points</p><p>"+msg+"</p>"
+    + '<table class="rank"><tr><th>Rank</th><th>Player</th><th>Score</th></tr>'+rows+"</table>",
+    [["Next player ▶", () => { S.m = 0; S.score = 0; startScreen(); }]]);
 }
 function timeout(){                     // หมดเวลา: เตือน + เริ่ม Mission ใหม่ (ให้กำลังใจ)
   S.locked = true; clearInterval(tm); cancelGrab(); sfx("alarm");
@@ -341,8 +360,12 @@ function sfx(k){
 function hero(cls){ const el = $("hero"); el.classList.remove("jump","shake"); void el.offsetWidth; el.classList.add(cls); el.onanimationend = () => el.classList.remove("jump","shake"); }
 
 /* หน้าเริ่มเกม */
-showOv("<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 Missions · 8 ข้อต่อ Mission · 15 วินาทีต่อข้อ</p><p>เลือกวิธีเล่น</p>",
-  [["🖐️ เล่นด้วยกล้อง (จับธนบัตรด้วยมือ)", () => { audio(); startCam(); intro(); }], ["🖱️ เมาส์ / นิ้วแตะ", () => { audio(); intro(); }]]);
+function startScreen(){
+  const go = cam => () => { PLAYER = $("pn").value.trim() || "Player " + (loadBoard().length + 1); audio(); if (cam && !handMode) startCam(); intro(); };
+  showOv('<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 Missions · 8 ข้อต่อ Mission · 15 วินาทีต่อข้อ</p><input id="pn" class="pn" maxlength="16" placeholder="Your name"><p>เลือกวิธีเล่น</p>',
+    [["🖐️ เล่นด้วยกล้อง (จับธนบัตรด้วยมือ)", go(true)], ["🖱️ เมาส์ / นิ้วแตะ", go(false)]]);
+}
+startScreen();
 </script>
 </body>
 </html>
