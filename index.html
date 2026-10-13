@@ -66,6 +66,24 @@ ol.lb li.me{color:var(--gold);font-weight:700}
 .princess.stuck{animation:waving 1s ease-in-out infinite}
 @keyframes descend{0%{transform:translate(0,0)}60%{transform:translate(0,160px)}100%{transform:translate(95px,160px)}}
 @keyframes waving{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
+.stage{position:relative;height:130px;perspective:500px;margin-top:6px;background:radial-gradient(ellipse 50px 9px at 50% 112px,rgba(0,0,0,.45),transparent)}
+.hero{position:absolute;left:50%;top:62px;width:0;height:0;transform-style:preserve-3d;animation:sway3d 5s ease-in-out infinite}
+.hero.jump{animation:hjump .8s ease 1}
+.hero.shake{animation:hshake .5s ease 1}
+.cube{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+.f{position:absolute;left:0;top:0;background:var(--c);border:2px solid rgba(0,0,0,.3);box-sizing:border-box}
+.fr,.bk{width:var(--w);height:var(--h);margin:calc(var(--h)/-2) 0 0 calc(var(--w)/-2)}
+.lf,.rt{width:var(--d);height:var(--h);margin:calc(var(--h)/-2) 0 0 calc(var(--d)/-2)}
+.tp,.bt{width:var(--w);height:var(--d);margin:calc(var(--d)/-2) 0 0 calc(var(--w)/-2)}
+.fr{transform:translateZ(calc(var(--d)/2))}
+.bk{transform:rotateY(180deg) translateZ(calc(var(--d)/2));filter:brightness(.7)}
+.lf{transform:rotateY(-90deg) translateZ(calc(var(--w)/2));filter:brightness(.85)}
+.rt{transform:rotateY(90deg) translateZ(calc(var(--w)/2));filter:brightness(.85)}
+.tp{transform:rotateX(90deg) translateZ(calc(var(--h)/2));filter:brightness(1.2)}
+.bt{transform:rotateX(-90deg) translateZ(calc(var(--h)/2));filter:brightness(.6)}
+@keyframes sway3d{0%,100%{transform:rotateY(-35deg) translateY(0)}25%,75%{transform:rotateY(0) translateY(-6px)}50%{transform:rotateY(35deg) translateY(0)}}
+@keyframes hjump{0%{transform:translateY(0) rotateY(0)}40%{transform:translateY(-40px) rotateY(180deg)}100%{transform:translateY(0) rotateY(360deg)}}
+@keyframes hshake{0%,100%{transform:rotateZ(0)}25%{transform:rotateZ(-12deg)}75%{transform:rotateZ(12deg)}}
 .hide{display:none}
 @media (prefers-color-scheme:light){} /* castle theme is intentionally always dark */
 .mute{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:8px;z-index:10;background:#150f26;font-size:1.3rem;padding:8px 12px}
@@ -142,6 +160,7 @@ ol.lb li.me{color:var(--gold);font-weight:700}
   <button class="btn" id="againBtn">เล่นอีกครั้ง</button>
 </section>
 
+<div class="stage" aria-hidden="true"><div id="hero" class="hero"></div></div>
 </main>
 
 <script>
@@ -448,7 +467,7 @@ function finish(){
   $("rescueMsg").textContent = saved
     ? "👸 ช่วยเจ้าหญิงสำเร็จ! (ตอบถูก " + pct + "%) เจ้าหญิงลงจากหอคอยได้อย่างปลอดภัย"
     : "🆘 ตอบถูก " + pct + "% ต้องมากกว่า " + RESCUE_PERCENT + "% ถึงจะช่วยได้ เจ้าหญิงยังติดอยู่บนหอคอย ลองใหม่อีกครั้งนะ!";
-  sfx(saved ? "win" : "no");
+  sfx(saved ? "win" : "no"); hero3d(saved ? "ok" : "no");
   show("end");
 }
 
@@ -488,6 +507,7 @@ const SAYS = [ // [เริ่มข้อ, ตอบถูก, ตอบผิ
   ["โฮก! หาประโยคคำสาปให้เจอ","เจ๋งมาก!","เกือบแล้ว สู้ๆ"]
 ];
 function mascot(state){
+  hero3d(state);
   const lv = QUESTIONS[qIndex].level, el = $("mChar");
   el.textContent = CHARS[lv]; el.className = "char a" + lv;
   if (state !== "ask"){ void el.offsetWidth; el.classList.add(state==="ok" ? "cheer" : "oops");
@@ -535,6 +555,30 @@ function sfx(kind){
   else if (kind === "no"){ tone(220,t,.25,"sawtooth",.05); tone(165,t+.12,.3,"sawtooth",.05); }
   else if (kind === "chest"){ [523,659,784,1047].forEach((f,i)=>tone(f,t+i*.1,.25,"triangle",.1)); }
   else if (kind === "win"){ [523,659,784,659,784,1047].forEach((f,i)=>tone(f,t+i*.14,.3,"triangle",.1)); }
+}
+/* ===== 3D hero built from CSS cubes (no libraries) ===== */
+(function buildHero(){
+  const h = $("hero");
+  const parts = [ // [width, height, depth, color, x, y]
+    [14,30,14,"#4b3b8f",-10,40],[14,30,14,"#4b3b8f",10,40],   // legs
+    [36,34,20,"#c9ced8",0,8],                                  // body armor
+    [10,30,10,"#c9ced8",-24,8],[10,30,10,"#c9ced8",24,8],      // arms
+    [26,26,26,"#f2c9a0",0,-24],[30,10,30,"#9aa3b5",0,-42],    // head, helmet
+    [5,36,5,"#ffd24a",33,-12]];                                // sword
+  parts.forEach(([w,hh,d,c,x,y]) => {
+    const cu = document.createElement("div"); cu.className = "cube";
+    cu.style.cssText = "--w:"+w+"px;--h:"+hh+"px;--d:"+d+"px;--c:"+c+";transform:translate3d("+x+"px,"+y+"px,0)";
+    ["fr","bk","lf","rt","tp","bt"].forEach(k => { const f = document.createElement("i"); f.className = "f " + k; cu.appendChild(f); });
+    h.appendChild(cu);
+  });
+  const face = h.children[5].querySelector(".fr");   // face on the head
+  face.textContent = "•ᴗ•"; face.style.cssText += ";display:flex;align-items:center;justify-content:center;font-size:12px;color:#222";
+})();
+function hero3d(state){   // jump when correct, shake when wrong
+  const el = $("hero"); if (!el || state === "ask") return;
+  el.classList.remove("jump","shake"); void el.offsetWidth;
+  el.classList.add(state === "ok" ? "jump" : "shake");
+  el.onanimationend = () => el.classList.remove("jump","shake");
 }
 $("mute").onclick = () => {
   musicOn = !musicOn; $("mute").textContent = musicOn ? "🔊" : "🔇";
