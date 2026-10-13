@@ -46,6 +46,17 @@ input{font:inherit;width:100%;padding:12px;border-radius:12px;border:3px solid v
 ol.lb{padding-left:1.4em;margin:.5em 0}
 ol.lb li{padding:4px 0}
 ol.lb li.me{color:var(--gold);font-weight:700}
+.blank{display:inline-block;min-width:4.5em;border-bottom:4px dashed var(--torch);text-align:center;color:var(--gold);padding:0 .3em}
+.blank.over{background:#4a3a7a}
+.blank.fill{border-bottom-style:solid}
+.chips{display:flex;gap:10px;flex-wrap:wrap}
+.chip{touch-action:none;user-select:none;cursor:grab;padding:12px 22px}
+.ghost{position:fixed;z-index:9;pointer-events:none;opacity:.9;transform:translate(-50%,-50%)}
+.tbox{display:flex;gap:8px;flex-wrap:wrap}
+.tbox input{flex:1 1 200px;margin:0}
+.chest{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+.box{background:var(--stone2);font-size:2.4rem;padding:16px 0;border:3px solid var(--torch)}
+.box:disabled{border-color:transparent}
 .hide{display:none}
 @media (prefers-color-scheme:light){} /* castle theme is intentionally always dark */
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -59,6 +70,7 @@ ol.lb li.me{color:var(--gold);font-weight:700}
   <h1>🏰 Castle Treasure Hunt</h1>
   <p>ปราสาทโบราณซ่อนสมบัติไว้! ใช้ความรู้เรื่อง <b>Present Simple (Negative)</b> ผ่านทั้ง 4 ด่านเพื่อเปิดหีบสมบัติ</p>
   <p class="hint">ตอบแต่ละข้อภายใน 10 วินาที ตอบผิดไม่เป็นไร! จะมีคำใบ้ให้ทุกข้อ แล้วไปลุยข้อต่อไปได้เลย</p>
+  <p class="hint">🎁 ตอบถูกติดกัน 2 ข้อ รับสิทธิ์เปิดหีบสมบัติสุ่ม 1 กล่อง จะเจอกล่องเปล่า คะแนน ×2 หรือขโมยแต้มเพื่อน!</p>
   <label for="name" class="muted">ชื่อนักผจญภัย</label>
   <input id="name" maxlength="20" placeholder="พิมพ์ชื่อของเธอ" autocomplete="off">
   <button class="btn" id="goBtn">เริ่มผจญภัย</button>
@@ -84,6 +96,7 @@ ol.lb li.me{color:var(--gold);font-weight:700}
   <div class="q" id="qText"></div>
   <div class="opts" id="opts"></div>
   <div class="fb hide" id="fb"></div>
+  <div class="fb hide" id="chest"></div>
   <p><button class="btn hide" id="nextBtn">ต่อไป</button></p>
 </section>
 
@@ -108,6 +121,15 @@ const COINS_PER_CORRECT = 20;   // เหรียญต่อข้อที่
 const GEM_MULTIPLIER    = 2;    // ด่าน 2: ตอบถูกได้ S-Eraser Gem คูณเหรียญของข้อนั้น
 const BOSS_BONUS        = 100;  // โบนัสด่านบอส
 const BOSS_TARGET       = 3;    // ต้องตอบบอสถูกกี่ข้อถึงเปิดหีบ (ลดเป็น 2 ถ้าต้องการให้ง่ายขึ้น)
+const TYPE_EXTRA_TIME   = 10;   // วินาทีเพิ่มสำหรับข้อที่ต้องพิมพ์ตอบ
+const CHEST_STREAK      = 2;    // ตอบถูกติดกันกี่ข้อ ถึงได้เปิดหีบสุ่ม
+const STEAL_AMOUNT      = 30;   // แต้มที่ขโมยจากเพื่อนได้
+/* รูปแบบการตอบของแต่ละข้อ (เรียงข้อ 1-15)
+   "drag" = ลากคำตอบไปวางในช่องว่าง, "type" = พิมพ์ตอบ, "choice" = เลือกตัวเลือก */
+const MODES = ["drag","type","drag","type",   // ด่าน 1
+                "type","type","choice","choice", // ด่าน 2
+                "drag","drag","type","type",   // ด่าน 3
+                "choice","choice","choice"];     // บอส
 
 /* ข้อมูลด่าน: ชื่อ ภารกิจ และรางวัล */
 const LEVELS = [
@@ -170,13 +192,15 @@ const QUESTIONS = [
    ===================================================== */
 const $ = id => document.getElementById(id);
 const show = id => ["start","intro","play","end"].forEach(s => $(s).classList.toggle("hide", s !== id));
+/* ทำให้คำตอบที่พิมพ์เทียบง่ายขึ้น: ไม่สนตัวพิมพ์เล็กใหญ่ ช่องว่างเกิน และจุดท้ายประโยค */
+const norm = s => s.toLowerCase().replace(/[’‘`´]/g,"'").replace(/[.!?]+$/,"").replace(/\s+/g," ").trim();
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
 
 let S;            // สถานะเกม
 let qIndex, timerId, locked, playerName = "";
 
 function newGame(){
-  S = { coins:0, silverKey:false, gems:0, shields:0, bossRight:0, bossOpen:false, correct:0, levelCorrect:[0,0,0,0] };
+  S = { streak:0, coins:0, silverKey:false, gems:0, shields:0, bossRight:0, bossOpen:false, correct:0, levelCorrect:[0,0,0,0] };
   qIndex = 0;
 }
 
@@ -198,27 +222,91 @@ function showQuestion(){
   const q = QUESTIONS[qIndex];
   locked = false;
   $("qHint").textContent = LEVELS[q.level].hint;
-  $("qText").textContent = q.text;
+  const mode = MODES[qIndex] || "choice";
+  const correct = q.options[q.answer];
   $("fb").classList.add("hide");
+  $("chest").classList.add("hide");
   $("nextBtn").classList.add("hide");
   const box = $("opts"); box.innerHTML = "";
-  shuffle(q.options.map((t,i)=>({t, ok:i===q.answer}))).forEach(o=>{
-    const b = document.createElement("button");
-    b.className = "opt"; b.textContent = o.t; b.dataset.ok = o.ok ? "1" : "0";
-    b.onclick = () => answer(b, o.ok);
-    box.appendChild(b);
-  });
+  const qt = $("qText"); qt.textContent = "";
+  const opts = shuffle(q.options.map((t,i)=>({t, ok:i===q.answer})));
+  if (mode === "drag") {
+    // ตัดโจทย์ที่ ______ แล้วใส่ช่องว่างให้ลากคำตอบมาวาง
+    const parts = q.text.split("______");
+    const blank = document.createElement("span");
+    blank.className = "blank"; blank.textContent = "\u00A0";
+    qt.append(parts[0], blank, parts[1] || "");
+    box.className = "chips";
+    opts.forEach(o=>{
+      const c = document.createElement("button");
+      c.className = "opt chip"; c.textContent = o.t; c.dataset.ok = o.ok ? "1" : "0";
+      makeDraggable(c, blank, o.ok);
+      box.appendChild(c);
+    });
+    $("qHint").textContent += " (ลากคำตอบไปวางในช่องว่าง หรือแตะที่คำตอบ)";
+  } else if (mode === "type") {
+    qt.textContent = q.text; box.className = "tbox";
+    const input = document.createElement("input");
+    input.id = "ans"; input.placeholder = "พิมพ์คำตอบที่นี่"; input.autocomplete = "off"; input.autocapitalize = "none"; input.spellcheck = false;
+    const go = document.createElement("button"); go.className = "btn"; go.textContent = "ตรวจคำตอบ";
+    const submit = () => { if (!locked) answer(null, norm(input.value) === norm(correct)); };
+    go.onclick = submit;
+    input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+    box.append(input, go);
+    $("qHint").textContent += q.level===1 ? " (พิมพ์ประโยคที่ถูกต้องทั้งประโยค)" : " (พิมพ์คำตอบ)";
+    setTimeout(()=>input.focus(), 50);
+  } else {
+    qt.textContent = q.text; box.className = "opts";
+    opts.forEach(o=>{
+      const b = document.createElement("button");
+      b.className = "opt"; b.textContent = o.t; b.dataset.ok = o.ok ? "1" : "0";
+      b.onclick = () => answer(b, o.ok);
+      box.appendChild(b);
+    });
+  }
   updateHud();
   show("play");
-  startTimer();
+  startTimer(mode === "type" ? TIME_PER_QUESTION + TYPE_EXTRA_TIME : TIME_PER_QUESTION);
 }
 
-function startTimer(){
+/* ลากคำตอบ (ใช้ได้ทั้งเมาส์และนิ้วบนมือถือ) แตะที่คำตอบเฉยๆ ก็ตอบได้ */
+function makeDraggable(chip, blank, ok){
+  const fill = () => { blank.textContent = chip.textContent; blank.classList.add("fill"); answer(chip, ok); };
+  chip.addEventListener("click", e => { if (e.detail === 0 && !locked) fill(); }); // กดด้วยคีย์บอร์ด
+  chip.addEventListener("pointerdown", e => {
+    if (locked) return;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY; let ghost = null, moved = false;
+    const over = (x,y) => { const r = blank.getBoundingClientRect(), p = 24;
+      return x>r.left-p && x<r.right+p && y>r.top-p && y<r.bottom+p; };
+    const move = ev => {
+      if (!moved && Math.hypot(ev.clientX-sx, ev.clientY-sy) > 8){
+        moved = true; ghost = chip.cloneNode(true); ghost.classList.add("ghost");
+        document.body.appendChild(ghost); chip.style.opacity = .3;
+      }
+      if (ghost){ ghost.style.left = ev.clientX+"px"; ghost.style.top = ev.clientY+"px";
+        blank.classList.toggle("over", over(ev.clientX, ev.clientY)); }
+    };
+    const up = ev => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      if (ghost) ghost.remove();
+      chip.style.opacity = ""; blank.classList.remove("over");
+      if (!locked && (!moved || over(ev.clientX, ev.clientY))) fill();
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+  });
+}
+
+function startTimer(sec = TIME_PER_QUESTION){
   clearInterval(timerId);
   const bar = $("timer"), t0 = Date.now();
   bar.style.transition = "none"; bar.style.width = "100%"; bar.style.background = "var(--good)";
   timerId = setInterval(()=>{
-    const left = 1 - (Date.now()-t0)/(TIME_PER_QUESTION*1000);
+    const left = 1 - (Date.now()-t0)/(sec*1000);
     bar.style.width = Math.max(left,0)*100 + "%";
     if (left < .35) bar.style.background = "var(--torch)";
     if (left <= 0){ clearInterval(timerId); answer(null,false,true); }
@@ -228,13 +316,14 @@ function startTimer(){
 function answer(btn, ok, timeout){
   if (locked) return; locked = true; clearInterval(timerId);
   const q = QUESTIONS[qIndex], lv = q.level;
+  document.querySelectorAll("#ans,.tbox button").forEach(b=>b.disabled = true);
   document.querySelectorAll(".opt").forEach(b=>{
     b.disabled = true;
     if (b.dataset.ok==="1") b.classList.add("right");
   });
   let msg = "";
   if (ok){
-    S.correct++; S.levelCorrect[lv]++;
+    S.correct++; S.levelCorrect[lv]++; S.streak++;
     let gain = COINS_PER_CORRECT;
     msg = "✅ เก่งมาก! +" + COINS_PER_CORRECT + " 🪙";
     if (lv===0){ if(!S.silverKey) msg += " ได้ 🗝️ Silver Key!"; S.silverKey = true; }
@@ -243,17 +332,54 @@ function answer(btn, ok, timeout){
     if (lv===3){ S.bossRight++; msg = "✅ เจอคำสาปแล้ว!"; }
     S.coins += gain;
   } else {
+    S.streak = 0;
     if (btn) btn.classList.add("wrong");
     msg = (timeout ? "⏰ หมดเวลา ไม่เป็นไร! " : "ยังไม่ถูก ไม่เป็นไรนะ ") + "ลองดูคำอธิบายแล้วไปต่อกัน 💪";
   }
   const fb = $("fb");
-  fb.textContent = msg + "  💡 " + q.tip;
+  fb.textContent = msg + (ok ? "" : "  ✔ คำตอบ: " + q.options[q.answer]) + "  💡 " + q.tip;
   fb.classList.remove("hide");
   updateHud();
   const last = qIndex === QUESTIONS.length-1;
-  $("nextBtn").textContent = last ? "เปิดหีบสมบัติ!" : "ต่อไป";
-  $("nextBtn").classList.remove("hide");
-  $("nextBtn").focus();
+  $("nextBtn").textContent = last ? "ดูผลคะแนน" : "ต่อไป";
+  if (ok && S.streak >= CHEST_STREAK){ S.streak = 0; openChest(); }   // ตอบถูกติดกัน → เปิดหีบ
+  else { $("nextBtn").classList.remove("hide"); $("nextBtn").focus(); }
+}
+
+/* หีบสมบัติสุ่ม: 3 กล่อง = กล่องเปล่า / คะแนน ×2 / ขโมยแต้มเพื่อน (สลับตำแหน่งทุกครั้ง) */
+function openChest(){
+  const ch = $("chest");
+  ch.innerHTML = "<b>🎁 ตอบถูกติดกัน " + CHEST_STREAK + " ข้อ! เลือกหีบสมบัติ 1 กล่อง</b>";
+  const row = document.createElement("div"); row.className = "chest";
+  const prizes = shuffle(["empty","double","steal"]);
+  prizes.forEach((p,i)=>{
+    const b = document.createElement("button");
+    b.className = "box"; b.textContent = "🎁"; b.setAttribute("aria-label","กล่องสมบัติ "+(i+1));
+    b.onclick = () => revealChest(ch, row, prizes, i);
+    row.appendChild(b);
+  });
+  ch.appendChild(row); ch.classList.remove("hide");
+}
+function revealChest(ch, row, prizes, picked){
+  const icon = { empty:"💨", double:"✨×2", steal:"🦹" };
+  [...row.children].forEach((b,i)=>{ b.disabled = true; b.textContent = icon[prizes[i]]; if(i!==picked) b.style.opacity=.5; });
+  const p = prizes[picked]; let msg;
+  if (p === "empty") msg = "💨 กล่องเปล่า! ไม่เป็นไร ลุยข้อต่อไป";
+  else if (p === "double"){ S.coins *= 2; msg = "✨ คะแนน ×2! ตอนนี้มี " + S.coins + " 🪙"; }
+  else msg = stealFromFriend();
+  const m = document.createElement("p"); m.textContent = msg; ch.appendChild(m);
+  updateHud();
+  $("nextBtn").classList.remove("hide"); $("nextBtn").focus();
+}
+/* ขโมยแต้มเพื่อน: สุ่มเพื่อนจาก Leaderboard (ถ้าเพื่อนมี 🛡️ Shield of Truth จะกันได้ 1 ครั้ง) */
+function stealFromFriend(){
+  const all = loadBoard(), friends = all.filter(e => e.name !== playerName);
+  if (!friends.length){ S.coins += STEAL_AMOUNT;
+    return "🦹 ขโมยแต้ม! +" + STEAL_AMOUNT + " 🪙 (ยังไม่มีเพื่อนใน Leaderboard ให้ครูเลือกเพื่อนในห้อง 1 คนมาเสียแต้มนี้)"; }
+  const v = friends[Math.floor(Math.random()*friends.length)];
+  if ((v.shields||0) > 0){ v.shields--; storeBoard(all); return "🛡️ " + v.name + " มี Shield of Truth! ขโมยไม่สำเร็จ"; }
+  const amt = Math.min(STEAL_AMOUNT, v.score); v.score -= amt; S.coins += amt; storeBoard(all);
+  return "🦹 ขโมยแต้มจาก " + v.name + " ได้ " + amt + " 🪙";
 }
 
 function next(){
@@ -286,8 +412,12 @@ let memBoard = [];
 function loadBoard(){
   try { return JSON.parse(localStorage.getItem("castleBoard")||"[]"); } catch(e){ return memBoard; }
 }
+function storeBoard(list){
+  memBoard = list;
+  try { localStorage.setItem("castleBoard", JSON.stringify(list)); } catch(e){}
+}
 function saveScore(){
-  const b = loadBoard(); b.push({name:playerName, score:S.coins, t:Date.now()});
+  const b = loadBoard(); b.push({name:playerName, score:S.coins, shields:S.shields, t:Date.now()});
   b.sort((x,y)=>y.score-x.score); const top = b.slice(0,10);
   memBoard = top;
   try { localStorage.setItem("castleBoard", JSON.stringify(top)); } catch(e){}
