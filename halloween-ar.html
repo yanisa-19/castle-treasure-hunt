@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Halloween AR Grammar Hunt</title>
+<!-- MediaPipe Hands (ต้องใช้อินเทอร์เน็ต) ถ้าโหลดไม่ได้ เกมจะเปลี่ยนเป็นโหมดเมาส์/ทัชอัตโนมัติ -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<style>
+:root{--bg:#120a1f;--or:#ff8a1f;--pur:#6a3fb5;--g:#3ddc84;--tx:#fff4e6}
+*{box-sizing:border-box;-webkit-user-select:none;user-select:none;touch-action:none}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:"Sarabun","Noto Sans Thai",system-ui,sans-serif}
+#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:.5}
+#shade{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0,#5a2d9acc,#120a1fe6)}
+#ui{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px calc(env(safe-area-inset-bottom,0px) + 6px)}
+#hud{display:flex;justify-content:space-between;gap:8px;font-weight:700;font-size:1rem}
+#hud span,#hud b{background:#0008;border-radius:99px;padding:3px 12px}
+.bar{height:12px;background:#0008;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;width:100%;background:var(--g)}
+#q{margin-top:5vh;text-align:center;font-weight:700;font-size:clamp(1.4rem,5vw,2.3rem);line-height:1.4;text-shadow:0 2px 8px #000}
+#q.ok{color:var(--g)}
+.slot{display:inline-block;min-width:3.4em;min-height:1.3em;border-bottom:4px dashed var(--or);color:#ffd24a;padding:0 8px;vertical-align:bottom}
+#q.ok .slot{background:#3ddc8455;border-color:var(--g)}
+#notes{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:5vh}
+.note{position:relative;min-width:96px;padding:14px 20px;text-align:center;font-weight:700;font-size:1.35rem;color:#0b3d1e;background:linear-gradient(135deg,#c8f5d7,#6fd29a 60%,#4cbf82);border:3px double #1f7a45;border-radius:8px;box-shadow:0 4px 0 #1c6b3e;cursor:grab}
+.note::before{content:"฿";position:absolute;left:6px;top:1px;font-size:.7rem;opacity:.6}
+.tile{min-width:54px;padding:10px 12px}
+.ghost{position:fixed;z-index:7;pointer-events:none;transform:translate(-50%,-50%) rotate(-6deg) scale(1.12);box-shadow:0 14px 22px #000a}
+.held{opacity:.25}.used{visibility:hidden}
+.b{font:inherit;font-weight:700;font-size:1.1rem;background:var(--or);color:#2a1300;border:0;border-radius:12px;padding:12px 22px;box-shadow:0 4px 0 #b05a00;cursor:pointer}
+#clr{align-self:center}.hide{display:none!important}
+#ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
+.card{max-width:560px;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
+.card h1,.card h2{margin:.2em 0;color:var(--or)}.card p{margin:.5em 0;font-size:1.1rem}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+#toast{position:fixed;z-index:6;top:calc(env(safe-area-inset-top,0px) + 52px);left:50%;transform:translateX(-50%);background:#000b;border-radius:99px;padding:4px 14px;font-size:.9rem}
+#fx{position:fixed;inset:0;z-index:9;pointer-events:none}
+/* ตัวการ์ตูน 3D (CSS) */
+.stage{position:relative;margin-top:auto;height:110px;perspective:500px}
+.hero{position:absolute;left:50%;top:56px;width:0;height:0;transform-style:preserve-3d;animation:sway 5s ease-in-out infinite}
+.hero.jump{animation:hj .8s ease 1}.hero.shake{animation:hs .5s ease 1}
+.cube{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+.f{position:absolute;left:0;top:0;background:var(--c);border:2px solid #0004;box-sizing:border-box}
+.fr,.bk{width:var(--w);height:var(--h);margin:calc(var(--h)/-2) 0 0 calc(var(--w)/-2)}
+.lf,.rt{width:var(--d);height:var(--h);margin:calc(var(--h)/-2) 0 0 calc(var(--d)/-2)}
+.tp,.bt{width:var(--w);height:var(--d);margin:calc(var(--d)/-2) 0 0 calc(var(--w)/-2)}
+.fr{transform:translateZ(calc(var(--d)/2))}.bk{transform:rotateY(180deg) translateZ(calc(var(--d)/2));filter:brightness(.7)}
+.lf{transform:rotateY(-90deg) translateZ(calc(var(--w)/2));filter:brightness(.85)}.rt{transform:rotateY(90deg) translateZ(calc(var(--w)/2));filter:brightness(.85)}
+.tp{transform:rotateX(90deg) translateZ(calc(var(--h)/2));filter:brightness(1.2)}.bt{transform:rotateX(-90deg) translateZ(calc(var(--h)/2));filter:brightness(.6)}
+@keyframes sway{0%,100%{transform:rotateY(-35deg)}25%,75%{transform:rotateY(0) translateY(-6px)}50%{transform:rotateY(35deg)}}
+@keyframes hj{0%{transform:translateY(0) rotateY(0)}40%{transform:translateY(-40px) rotateY(180deg)}100%{transform:translateY(0) rotateY(360deg)}}
+@keyframes hs{0%,100%{transform:rotateZ(0)}25%{transform:rotateZ(-12deg)}75%{transform:rotateZ(12deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<video id="cam" playsinline muted></video><div id="shade"></div>
+<div id="ui">
+  <div id="hud"><b id="hm"></b><span id="hq"></span><span id="hs">⭐ 0</span><span id="hk"></span></div>
+  <div class="bar"><i id="tb"></i></div>
+  <div id="q"></div>
+  <div id="notes"></div>
+  <button class="b hide" id="clr">↺ Clear</button>
+  <div class="stage" aria-hidden="true"><div id="hero" class="hero"></div></div>
+</div>
+<div id="toast" class="hide"></div>
+<div id="ov"><div class="card" id="ovc"></div></div>
+<canvas id="fx"></canvas>
+
+<script>
+/* =====================================================
+   ส่วนตั้งค่า + ข้อมูลโจทย์ (ครูแก้ไขได้ที่นี่)
+   ===================================================== */
+const TIME = 15;      // วินาทีต่อข้อ
+const PER = 8;        // ข้อต่อ Mission
+const STREAK = 3;     // ตอบถูกติดกันกี่ข้อ ถึงเปิดหีบ
+const PTS = 10;       // คะแนนต่อข้อ
+const FRIEND_PTS = 30;// แต้มเพื่อนในหีบ
+
+// Mission 1: q = โจทย์, a = คำตอบ (s / es / none), why = คำอธิบายเมื่อตอบผิด
+const M1 = [
+ {q:"She doesn't ___ (like) ghosts.", a:"none", why:"หลัง doesn't ใช้กริยาช่องเดิม ไม่เติม s/es → doesn't like"},
+ {q:"He ___ (play) football.", a:"s", why:"He/She/It + กริยา ต้องเติม s → plays"},
+ {q:"My dog doesn't ___ (eat) candy.", a:"none", why:"หลัง doesn't ไม่เติม s/es → doesn't eat"},
+ {q:"The witch ___ (watch) the moon.", a:"es", why:"watch ลงท้ายด้วย ch ต้องเติม es → watches"},
+ {q:"It doesn't ___ (fly) at night.", a:"none", why:"หลัง doesn't ไม่เติม s/es → doesn't fly"},
+ {q:"She ___ (go) to the party.", a:"es", why:"go เติม es → goes"},
+ {q:"The cat doesn't ___ (sleep) here.", a:"none", why:"หลัง doesn't ไม่เติม s/es → doesn't sleep"},
+ {q:"He ___ (wash) the pumpkin.", a:"es", why:"wash ลงท้ายด้วย sh ต้องเติม es → washes"}];
+// Mission 2: เรียงตัวอักษรให้เป็นคำ (a = คำตอบ ตัวพิมพ์ใหญ่)
+const M2 = [
+ {q:"He ___ have the key.", a:"DOESN'T", why:"He ใช้ doesn't"},
+ {q:"They ___ like candy.", a:"DON'T", why:"They ใช้ don't"},
+ {q:"She ___ a witch.", a:"ISN'T", why:"She + is not → isn't"},
+ {q:"We ___ scared of ghosts.", a:"AREN'T", why:"We + are not → aren't"},
+ {q:"I do ___ like spiders.", a:"NOT", why:"do + not → do not"},
+ {q:"She doesn't ___ TV. (ดู)", a:"WATCH", why:"หลัง doesn't ใช้กริยาช่องเดิม → watch"},
+ {q:"He doesn't ___ here. (เล่น)", a:"PLAY", why:"หลัง doesn't ใช้กริยาช่องเดิม → play"},
+ {q:"The ghost doesn't ___ candy. (ชอบ)", a:"LIKE", why:"หลัง doesn't ใช้กริยาช่องเดิม → like"}];
+// Mission 3: o = ตัวเลือก (ธนบัตร)
+const M3 = [
+ {q:"I ___ scared of the dark.", o:["am not","don't"], a:"am not", why:"scared เป็นคุณศัพท์ → ใช้ be + not (am not)"},
+ {q:"She ___ like spiders.", o:["doesn't","isn't"], a:"doesn't", why:"like เป็นกริยาทั่วไป → doesn't"},
+ {q:"They ___ afraid of bats.", o:["aren't","don't"], a:"aren't", why:"afraid เป็นคุณศัพท์ → aren't"},
+ {q:"He ___ eat candy at night.", o:["doesn't","isn't"], a:"doesn't", why:"eat เป็นกริยาทั่วไป → doesn't"},
+ {q:"We ___ in the haunted house.", o:["aren't","don't"], a:"aren't", why:"in the house บอกที่อยู่ → be + not (aren't)"},
+ {q:"The cat ___ a ghost.", o:["isn't","doesn't"], a:"isn't", why:"a ghost เป็นคำนาม ตามหลัง is → isn't"},
+ {q:"I ___ like pumpkin soup.", o:["don't","am not"], a:"don't", why:"like เป็นกริยาทั่วไป → don't"},
+ {q:"It ___ scary.", o:["isn't","doesn't"], a:"isn't", why:"scary เป็นคุณศัพท์ → isn't"}];
+const HAND = "🖐️ จีบนิ้วโป้ง+นิ้วชี้ = จับธนบัตร เลื่อนไปที่ช่องว่าง แล้วปล่อยนิ้วเพื่อวาง";
+const MISSIONS = [
+ {name:"The Chamber of the S-Eraser", data:M1, opts:[["+s","s"],["+es","es"],["no s/es","none"]],
+  how:"ต้องเติม s, es หรือไม่เติมอะไรเลย? เลือกธนบัตรคำตอบ"},
+ {name:"The Ultimate Master Chest", data:M2, letters:true,
+  how:"จับตัวอักษรไปเรียงที่ช่องว่างให้เป็นคำที่ถูกต้อง"},
+ {name:"The Mirror of Illusion", data:M3,
+  how:"เลือกคำที่ถูกต้อง: don't / doesn't หรือ am not / isn't / aren't"}];
+
+/* =====================================================
+   สถานะเกม + ฟังก์ชันหลัก
+   ===================================================== */
+const $ = id => document.getElementById(id);
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];} return a; };
+const S = {m:0,i:0,score:0,streak:0,mStart:0,locked:true,placed:"",t0:0,grab:null,sec:0};
+let handMode = false, tm = null;
+
+/* หน้าต่างข้อความ (เริ่มเกม/อธิบาย/หีบ/จบเกม) btns = [[ข้อความปุ่ม, ฟังก์ชัน], ...] */
+function showOv(html, btns){
+  $("ovc").innerHTML = html + '<div class="row" id="orow"></div>';
+  btns.forEach(([t,fn]) => { const b = document.createElement("button"); b.className="b"; b.textContent=t; b.onclick=()=>{ $("ov").classList.add("hide"); fn(); }; $("orow").appendChild(b); });
+  $("ov").classList.remove("hide");
+}
+function hud(){ $("hs").textContent = "⭐ " + S.score; $("hk").textContent = "🔥".repeat(S.streak); }
+function toast(t){ $("toast").textContent = t; $("toast").classList.remove("hide"); setTimeout(()=>$("toast").classList.add("hide"), 4000); }
+
+function intro(){
+  const m = MISSIONS[S.m]; S.i = 0; S.streak = 0; S.mStart = S.score; S.locked = true; clearInterval(tm);
+  showOv("<h2>🎃 Mission "+(S.m+1)+"</h2><h2>"+m.name+"</h2><p>"+m.how+"</p><p>"+(handMode?HAND:"ลากธนบัตรไปวางที่ช่องว่าง")+"</p>", [["Start!", render]]);
+}
+
+function render(){                      // แสดงโจทย์ข้อปัจจุบัน
+  const m = MISSIONS[S.m], q = m.data[S.i];
+  S.locked = false; S.placed = ""; S.t0 = performance.now(); S.sec = TIME;
+  $("hm").textContent = "M" + (S.m+1); $("hq").textContent = (S.i+1) + "/" + PER; hud();
+  $("q").className = ""; $("q").innerHTML = q.q.replace("___", '<span id="slot" class="slot"></span>');
+  $("clr").classList.toggle("hide", !m.letters);
+  const box = $("notes"); box.innerHTML = "";
+  let items;
+  if (m.letters){ items = q.a.split(""); for (let k=0;k<5;k++){ const s = shuffle(items); items = s; if (s.join("") !== q.a) break; } items = items.map(l=>[l,l,"tile"]); }
+  else items = shuffle(m.opts || q.o.map(t=>[t,t])).map(o=>[o[0],o[1],""]);
+  items.forEach(([label,val,cls]) => { const n = document.createElement("div"); n.className = "note "+cls; n.textContent = label; n.dataset.v = val; box.appendChild(n); });
+  clearInterval(tm); tm = setInterval(tick, 100);
+}
+function tick(){                        // นับเวลา 15 วินาที
+  if (S.locked) return;
+  const left = TIME - (performance.now() - S.t0)/1000;
+  $("tb").style.width = Math.max(left,0)/TIME*100 + "%";
+  $("tb").style.background = left < 5 ? "#ff6b6b" : "var(--g)";
+  if (left < 3 && Math.ceil(left) !== S.sec){ S.sec = Math.ceil(left); beep(990,0,.08); }
+  if (left <= 0) timeout();
+}
+function submit(val){                   // ตรวจคำตอบ
+  if (S.locked) return; S.locked = true;
+  const m = MISSIONS[S.m], q = m.data[S.i], ok = val === q.a;
+  if (ok){
+    S.score += PTS; S.streak++; $("q").classList.add("ok"); burst(innerWidth/2, 140, "#3ddc84"); sfx("ok"); hero("jump"); hud();
+    setTimeout(() => { if (S.streak >= STREAK) chest(); else next(); }, 900);
+  } else {
+    S.streak = 0; hud(); sfx("no"); hero("shake");
+    const shown = m.opts ? m.opts.find(o=>o[1]===q.a)[0] : q.a;
+    showOv("<h2>🤔 เกือบแล้ว!</h2><p>"+q.why+"</p><p>✔ คำตอบ: <b>"+shown+"</b></p><p>ไม่เป็นไรนะ ลองข้อต่อไปได้เลย 💪</p>", [["Next ▶", next]]);
+  }
+}
+function next(){
+  S.i++;
+  if (S.i < PER) return render();
+  clearInterval(tm); S.locked = true;
+  if (S.m < MISSIONS.length-1) showOv("<h2>🎉 Mission "+(S.m+1)+" complete!</h2><p>⭐ "+S.score+"</p>", [["Next mission ▶", ()=>{S.m++; intro();}]]);
+  else { const msg = S.score >= 150 ? "เก่งมาก! เป็นจอมเวทไวยากรณ์แล้ว 🧙" : "ทำได้ดีมาก! ลองเล่นอีกครั้งเพื่อเก็บดาวเพิ่มนะ 💪";
+    showOv("<h1>🏆 Halloween Master!</h1><p>⭐ "+S.score+" points</p><p>"+msg+"</p>", [["Play again ↺", ()=>{S.m=0; S.score=0; intro();}]]); }
+}
+function timeout(){                     // หมดเวลา: เตือน + เริ่ม Mission ใหม่ (ให้กำลังใจ)
+  S.locked = true; clearInterval(tm); cancelGrab(); sfx("alarm");
+  S.score = S.mStart;
+  showOv("<h2>⏰ หมดเวลา!</h2><p>ไม่เป็นไรนะ ทุกคนช้าได้ มาเริ่มด่านนี้ใหม่กัน สู้ๆ! 💪</p>", [["Try again ↺", ()=>{S.i=0; S.streak=0; render();}]]);
+}
+function chest(){                       // หีบสมบัติ: แต้มเพื่อน / ไม่มีอะไร / แต้ม ×2
+  S.streak = 0; hud(); clearInterval(tm); sfx("chest");
+  const prizes = shuffle(["friend","empty","x2"]);
+  showOv("<h2>🎁 ตอบถูกติดกัน "+STREAK+" ข้อ!</h2><p>เลือกหีบสมบัติ 1 กล่อง</p>", prizes.map(p => ["🎁", () => {
+    let msg;
+    if (p === "friend"){ S.score += FRIEND_PTS; msg = "🤝 ได้แต้มเพื่อน +"+FRIEND_PTS+"!"; }
+    else if (p === "x2"){ S.score *= 2; msg = "✨ คะแนน ×2!"; }
+    else msg = "💨 หีบว่าง ไม่เป็นไร ไปต่อกัน!";
+    hud(); sfx("chest"); showOv("<h2>"+msg+"</h2><p>⭐ "+S.score+"</p>", [["Continue ▶", next]]);
+  }]));
+}
+
+/* =====================================================
+   ระบบจับ-ลาก-วาง (ใช้ร่วมกันทั้งมือและเมาส์/ทัช)
+   ===================================================== */
+const P = {x:0,y:0,down:false};
+function move(x,y){ P.x=x; P.y=y; if (S.grab){ S.grab.g.style.left=x+"px"; S.grab.g.style.top=y+"px"; } }
+function pressAt(isHand){               // เริ่มจับ (หรือกดปุ่มถ้าเป็นโหมดมือ)
+  const el = document.elementFromPoint(P.x,P.y); if (!el) return;
+  const b = el.closest("button"); if (b){ if (isHand) b.click(); return; }
+  const n = el.closest(".note");
+  if (n && !S.locked && !n.classList.contains("used") && !S.grab){
+    const g = n.cloneNode(true); g.classList.add("ghost"); document.body.appendChild(g);
+    n.classList.add("held"); S.grab = {n,g}; move(P.x,P.y);
+  }
+}
+function cancelGrab(){ if (!S.grab) return; S.grab.g.remove(); S.grab.n.classList.remove("held"); S.grab = null; }
+function release(){                     // ปล่อย: ถ้าอยู่เหนือช่องว่างให้วาง
+  const G = S.grab; if (!G) return; cancelGrab();
+  const s = $("slot"); if (!s || S.locked) return;
+  const r = s.getBoundingClientRect(), p = 40;
+  if (P.x>r.left-p && P.x<r.right+p && P.y>r.top-p && P.y<r.bottom+p) place(G.n);
+}
+function place(n){
+  const m = MISSIONS[S.m], q = m.data[S.i];
+  if (m.letters){ S.placed += n.dataset.v; n.classList.add("used"); $("slot").textContent = S.placed; if (S.placed.length === q.a.length) submit(S.placed); }
+  else { $("slot").textContent = n.textContent; submit(n.dataset.v); }
+}
+$("clr").onclick = () => { if (S.locked) return; S.placed=""; $("slot").textContent=""; document.querySelectorAll(".used").forEach(n=>n.classList.remove("used")); };
+addEventListener("pointerdown", e => { move(e.clientX,e.clientY); pressAt(false); });
+addEventListener("pointermove", e => move(e.clientX,e.clientY));
+addEventListener("pointerup", release); addEventListener("pointercancel", release);
+
+/* =====================================================
+   กล้อง + MediaPipe Hands (จีบนิ้วโป้งกับนิ้วชี้ = จับ)
+   ===================================================== */
+const cam = $("cam"); let hands = null, LM = null;
+const mp = p => {                       // แปลงพิกัดมือ → พิกัดหน้าจอ (กลับซ้ายขวา + object-fit:cover)
+  const vw = cam.videoWidth||640, vh = cam.videoHeight||480, W = innerWidth, H = innerHeight, s = Math.max(W/vw,H/vh);
+  return {x: W - ((W-vw*s)/2 + p.x*vw*s), y: (H-vh*s)/2 + p.y*vh*s};
+};
+function onHands(r){
+  LM = (r.multiHandLandmarks && r.multiHandLandmarks[0]) || null;
+  if (!LM){ if (P.down){ P.down=false; release(); } return; }
+  const a = LM[4], b = LM[8], pos = mp({x:(a.x+b.x)/2, y:(a.y+b.y)/2});
+  const size = Math.hypot(LM[0].x-LM[9].x, LM[0].y-LM[9].y) || .1, ratio = Math.hypot(a.x-b.x,a.y-b.y)/size;
+  const pinch = P.down ? ratio < .5 : ratio < .32;      // มี hysteresis กันสั่น
+  move(P.x + (pos.x-P.x)*.55, P.y + (pos.y-P.y)*.55);   // ทำให้เคอร์เซอร์เคลื่อนที่นุ่มนวล
+  if (pinch && !P.down){ P.down = true; pressAt(true); }
+  else if (!pinch && P.down){ P.down = false; release(); }
+}
+async function startCam(){
+  try {
+    if (!window.Hands) throw new Error("hands lib");
+    cam.srcObject = await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:640,height:480},audio:false});
+    await cam.play();
+    hands = new Hands({locateFile: f => "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/" + f});
+    hands.setOptions({maxNumHands:1, modelComplexity:0, minDetectionConfidence:.6, minTrackingConfidence:.5});
+    hands.onResults(onHands); await hands.initialize();
+    handMode = true; toast("🖐️ พร้อมแล้ว! ยกมือขึ้นหน้ากล้อง"); loop();
+  } catch(e){ handMode = false; toast("ใช้กล้อง/ตรวจจับมือไม่ได้ → เล่นด้วยเมาส์หรือนิ้วแตะแทน"); }
+}
+async function loop(){ if (!handMode) return; if (cam.readyState >= 2){ try { await hands.send({image:cam}); } catch(e){} } requestAnimationFrame(loop); }
+
+/* =====================================================
+   เอฟเฟกต์บน Canvas: โครงมือ เคอร์เซอร์ และพลุ
+   ===================================================== */
+const fx = $("fx"), c = fx.getContext("2d"), PT = [];
+const CON = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function fit(){ fx.width = innerWidth; fx.height = innerHeight; } addEventListener("resize", fit); fit();
+function burst(x,y,col){ for (let i=0;i<28;i++) PT.push({x,y,vx:(Math.random()-.5)*9,vy:Math.random()*-8,l:1,col}); }
+function draw(){
+  c.clearRect(0,0,fx.width,fx.height);
+  if (handMode && LM){
+    c.lineWidth = 3; c.strokeStyle = "#ffb347"; c.shadowColor = "#ff8a1f"; c.shadowBlur = 12; c.beginPath();
+    CON.forEach(([a,b]) => { const p = mp(LM[a]), q = mp(LM[b]); c.moveTo(p.x,p.y); c.lineTo(q.x,q.y); });
+    c.stroke(); c.shadowBlur = 0;
+    c.beginPath(); c.arc(P.x,P.y,P.down?10:22,0,7); c.lineWidth = 4; c.strokeStyle = P.down ? "#3ddc84" : "#fff"; c.stroke();
+    if (P.down){ c.fillStyle = "#3ddc8899"; c.fill(); }
+  }
+  for (let i=PT.length-1;i>=0;i--){ const p = PT[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=.35; p.l-=.02;
+    if (p.l<=0){ PT.splice(i,1); continue; } c.globalAlpha = p.l; c.fillStyle = p.col; c.fillRect(p.x,p.y,6,6); }
+  c.globalAlpha = 1; requestAnimationFrame(draw);
+}
+draw();
+
+/* =====================================================
+   เสียง (Web Audio) + ตัวการ์ตูน 3D (กล่อง CSS)
+   ===================================================== */
+let AC = null;
+function audio(){ try { AC = AC || new (window.AudioContext||window.webkitAudioContext)(); AC.resume(); } catch(e){} }
+function beep(f,t,d,ty,v){ if (!AC) return; const o=AC.createOscillator(), g=AC.createGain(), s=AC.currentTime+t;
+  o.type = ty||"square"; o.frequency.value = f; g.gain.setValueAtTime(v||.07,s); g.gain.exponentialRampToValueAtTime(.0001,s+d);
+  o.connect(g); g.connect(AC.destination); o.start(s); o.stop(s+d); }
+function sfx(k){
+  if (k==="ok"){ beep(660,0,.12); beep(880,.1,.2); }
+  else if (k==="no"){ beep(220,0,.3,"sawtooth",.05); }
+  else if (k==="alarm"){ for (let i=0;i<4;i++) beep(i%2?660:880,i*.25,.2,"sawtooth",.09); }   // สัญญาณเตือนหมดเวลา
+  else if (k==="chest"){ [523,659,784,1047].forEach((f,i)=>beep(f,i*.1,.25,"triangle",.1)); }
+}
+(function buildHero(){                  // [กว้าง, สูง, ลึก, สี, x, y]
+  const h = $("hero");
+  [[36,36,36,"#ff8a1f",0,-22],[8,8,8,"#3ddc84",0,-46],[28,26,18,"#6a3fb5",0,6],[8,22,8,"#6a3fb5",-19,6],[8,22,8,"#6a3fb5",19,6],[10,22,10,"#2a1a4a",-7,30],[10,22,10,"#2a1a4a",7,30]]
+  .forEach(([w,hh,d,col,x,y]) => {
+    const cu = document.createElement("div"); cu.className = "cube";
+    cu.style.cssText = "--w:"+w+"px;--h:"+hh+"px;--d:"+d+"px;--c:"+col+";transform:translate3d("+x+"px,"+y+"px,0)";
+    ["fr","bk","lf","rt","tp","bt"].forEach(k => { const f = document.createElement("i"); f.className = "f "+k; cu.appendChild(f); });
+    h.appendChild(cu);
+  });
+  const face = h.children[0].querySelector(".fr"); face.textContent = "▾ᴗ▾"; face.style.cssText += ";display:flex;align-items:center;justify-content:center;font-size:13px;color:#2a1300";
+})();
+function hero(cls){ const el = $("hero"); el.classList.remove("jump","shake"); void el.offsetWidth; el.classList.add(cls); el.onanimationend = () => el.classList.remove("jump","shake"); }
+
+/* หน้าเริ่มเกม */
+showOv("<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 Missions · 8 ข้อต่อ Mission · 15 วินาทีต่อข้อ</p><p>เลือกวิธีเล่น</p>",
+  [["🖐️ เล่นด้วยกล้อง (จับธนบัตรด้วยมือ)", () => { audio(); startCam(); intro(); }], ["🖱️ เมาส์ / นิ้วแตะ", () => { audio(); intro(); }]]);
+</script>
+</body>
+</html>
