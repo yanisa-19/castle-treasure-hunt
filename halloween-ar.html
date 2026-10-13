@@ -56,6 +56,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 .rank tr:nth-child(2) td{background:#ffd24a40}.rank tr:nth-child(3) td{background:#cfd8e540}.rank tr:nth-child(4) td{background:#cd7f3240}
 .fl{position:fixed;bottom:0;z-index:2;opacity:.55;pointer-events:none;animation:rise linear infinite}
 @keyframes rise{from{transform:translateY(0) rotate(0)}to{transform:translateY(-115vh) rotate(360deg)}}
+#mute{position:fixed;z-index:10;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);padding:6px 12px;font-size:1.1rem}
+#clk{position:fixed;z-index:10;left:50%;top:20%;pointer-events:none;text-align:center;font-weight:700;transform:translate(-50%,-50%);animation:clkin 2.5s ease forwards}
+#clk b{display:block;font-size:5rem;animation:ring .3s linear 8}
+#clk span{background:#000c;border:2px solid #ff8a1f;border-radius:99px;padding:4px 14px;font-size:1.05rem;white-space:nowrap}
+@keyframes clkin{0%{transform:translate(-320%,-320%) scale(.2) rotate(-360deg);opacity:0}25%{transform:translate(-50%,-50%) scale(1.3);opacity:1}40%{transform:translate(-50%,-50%) scale(1)}85%{opacity:1}100%{transform:translate(-50%,-80%) scale(1);opacity:0}}
+@keyframes ring{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
 .card{max-width:560px;max-height:92vh;overflow:auto;touch-action:pan-y;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
@@ -96,6 +102,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
   <div class="stage" aria-hidden="true"><div id="hero" class="hero"></div></div>
 </div>
 <div id="toast" class="hide"></div>
+<button class="b" id="mute" aria-label="Sound on/off">🔊</button>
 <div id="ov"><div class="card" id="ovc"></div></div>
 <canvas id="fx"></canvas>
 
@@ -169,7 +176,7 @@ function hud(){ $("hs").textContent = "⭐ " + S.score; $("hk").textContent = "�
 function toast(t){ $("toast").textContent = t; $("toast").classList.remove("hide"); setTimeout(()=>$("toast").classList.add("hide"), 4000); }
 
 function intro(){
-  const m = MISSIONS[S.m]; S.i = 0; S.streak = 0; S.mStart = S.score; S.locked = true; clearInterval(tm);
+  const m = MISSIONS[S.m]; S.i = 0; S.streak = 0; S.mStart = S.score; S.locked = true; clearInterval(tm); startMusic(S.m);
   showOv("<h2>🎃 Mission "+(S.m+1)+"</h2><h2>"+m.name+"</h2><p>"+m.how+"</p><p>"+(m.typed ? (handMode?"จีบนิ้วกดตัวอักษรบนคีย์บอร์ดหน้าจอ แล้วกดตรวจคำตอบ":"พิมพ์คำตอบแล้วกด Enter") : handMode?HAND:"ลากธนบัตรไปวางที่ช่องว่าง")+"</p>", [["Start!", render]]);
 }
 
@@ -208,10 +215,18 @@ function submit(val){                   // ตรวจคำตอบ
     S.score += PTS; S.streak++; $("q").classList.add("ok"); burst(innerWidth/2, 140, "#3ddc84"); sfx("ok"); hero("jump"); hud();
     setTimeout(() => { if (S.streak >= STREAK) chest(); else next(); }, 900);
   } else {
-    S.streak = 0; hud(); sfx("no"); hero("shake");
+    S.streak = 0; hud(); sfx("no"); hero("shake"); clockWarn(Math.max(0, TIME-(performance.now()-S.t0)/1000));
     const shown = m.opts ? m.opts.find(o=>o[1]===q.a)[0] : q.a;
     showOv("<h2>🤔 เกือบแล้ว!</h2><p>"+q.why+"</p><p>✔ คำตอบ: <b>"+shown+"</b></p><p>ไม่เป็นไรนะ ลองข้อต่อไปได้เลย 💪</p>", [["Next ▶", next]]);
   }
+}
+/* ตอบผิด: นาฬิกา ⏰ ลอยเข้ามาเตือนเวลา (พร้อมเสียงติ๊กต็อก) */
+function clockWarn(left){
+  const old = $("clk"); if (old) old.remove();
+  const d = document.createElement("div"); d.id = "clk";
+  d.innerHTML = "<b>⏰</b><span>เหลือเวลา "+Math.ceil(left)+" วินาที · ระวังเวลานะ สู้ๆ!</span>";
+  document.body.appendChild(d); setTimeout(() => d.remove(), 2600);
+  [0,.25,.5,.75].forEach((t,i) => beep(i%2?900:1200,t,.07,"square",.05));
 }
 function next(){
   S.i++;
@@ -225,6 +240,7 @@ let PLAYER = "Player", memBoard = [];
 const esc = t => t.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
 function loadBoard(){ try { return JSON.parse(localStorage.getItem("hwBoard") || "[]"); } catch(e){ return memBoard; } }
 function finish(){
+  stopMusic(); sfx("chest");
   const b = loadBoard(), me = {name:PLAYER, score:S.score, t:Date.now()};
   b.push(me); b.sort((x,y) => y.score - x.score || x.t - y.t);
   const list = b.slice(0,30); memBoard = list; try { localStorage.setItem("hwBoard", JSON.stringify(list)); } catch(e){}
@@ -263,7 +279,7 @@ function pressAt(isHand){               // เริ่มจับ (หรื�
   const n = el.closest(".note");
   if (n && !S.locked && !n.classList.contains("used") && !S.grab){
     const g = n.cloneNode(true); g.classList.add("ghost"); document.body.appendChild(g);
-    n.classList.add("held"); S.grab = {n,g}; move(P.x,P.y);
+    n.classList.add("held"); S.grab = {n,g}; move(P.x,P.y); sfx("pop");
   }
 }
 function cancelGrab(){ if (!S.grab) return; S.grab.g.remove(); S.grab.n.classList.remove("held"); S.grab = null; }
@@ -273,7 +289,7 @@ function release(){                     // ปล่อย: ถ้าอยู�
   const r = s.getBoundingClientRect(), p = 40;
   if (P.x>r.left-p && P.x<r.right+p && P.y>r.top-p && P.y<r.bottom+p) place(G.n);
 }
-function place(n){
+function place(n){ sfx("drop");
   const m = MISSIONS[S.m], q = m.data[S.i];
   if (m.letters){ S.placed += n.dataset.v; n.classList.add("used"); $("slot").textContent = S.placed; if (S.placed.length === q.a.length) submit(S.placed); }
   else { $("slot").textContent = n.textContent; submit(n.dataset.v); }
@@ -354,14 +370,34 @@ draw();
 /* =====================================================
    เสียง (Web Audio) + ตัวการ์ตูน 3D (กล่อง CSS)
    ===================================================== */
-let AC = null;
+let AC = null, SND = true, bgTimer = null, bgStep = 0;
 function audio(){ try { AC = AC || new (window.AudioContext||window.webkitAudioContext)(); AC.resume(); } catch(e){} }
-function beep(f,t,d,ty,v){ if (!AC) return; const o=AC.createOscillator(), g=AC.createGain(), s=AC.currentTime+t;
+function beep(f,t,d,ty,v){ if (!AC || !SND) return; const o=AC.createOscillator(), g=AC.createGain(), s=AC.currentTime+t;
   o.type = ty||"square"; o.frequency.value = f; g.gain.setValueAtTime(v||.07,s); g.gain.exponentialRampToValueAtTime(.0001,s+d);
   o.connect(g); g.connect(AC.destination); o.start(s); o.stop(s+d); }
+function slide(f1,f2,t,d,ty,v){ if (!AC || !SND) return; const o=AC.createOscillator(), g=AC.createGain(), s=AC.currentTime+t;
+  o.type=ty; o.frequency.setValueAtTime(f1,s); o.frequency.exponentialRampToValueAtTime(f2,s+d); g.gain.setValueAtTime(v,s); g.gain.exponentialRampToValueAtTime(.0001,s+d);
+  o.connect(g); g.connect(AC.destination); o.start(s); o.stop(s+d); }
+/* ===== เพลงพื้นหลังสนุกๆ: ทำนองแยกตาม Mission ("-" = เว้น) ===== */
+const FQ = {A3:220,C4:261.6,D4:293.7,E4:329.6,G4:392,A4:440,C5:523.3,D5:587.3,E5:659.3};
+const TUNES = ["A4 - C5 A4 E4 - G4 E4 A4 - C5 D5 C5 A4 G4 -","E4 G4 A4 G4 E4 D4 E4 - A4 C5 D5 C5 A4 G4 E4 -","A4 E5 D5 C5 A4 C5 D5 - E5 D5 C5 A4 G4 A4 E4 -"].map(x => x.split(" "));
+const TEMPO = [120,135,150], BASS = [110,87.3,98,82.4];
+function startMusic(lv){
+  stopMusic(); if (!AC || !SND) return;
+  const t = TUNES[lv%3], beat = 60/TEMPO[lv%3]/2; bgStep = 0;
+  bgTimer = setInterval(() => { const n = t[bgStep%t.length];
+    if (n !== "-") beep(FQ[n],0,beat*.9,"triangle",.05);
+    if (bgStep%4 === 0) beep(BASS[(bgStep/4)%4],0,beat*3,"sine",.07);
+    if (bgStep%2 === 1) beep(1800,0,.03,"square",.012);
+    bgStep++; }, beat*1000);
+}
+function stopMusic(){ clearInterval(bgTimer); }
+$("mute").onclick = () => { SND = !SND; $("mute").textContent = SND ? "🔊" : "🔇"; if (SND) startMusic(S.m); else stopMusic(); };
 function sfx(k){
-  if (k==="ok"){ beep(660,0,.12); beep(880,.1,.2); }
-  else if (k==="no"){ beep(220,0,.3,"sawtooth",.05); }
+  if (k==="ok"){ const m = 1 + .12*Math.max(S.streak-1,0); [523,659,784,1047].forEach((f,i)=>beep(f*m,i*.07,.18,"triangle",.09)); }   // ยิ่งถูกติดกัน เสียงยิ่งสูง
+  else if (k==="no"){ slide(420,140,0,.45,"sawtooth",.06); slide(300,120,.25,.4,"sawtooth",.05); }                                  // เสียงโบ๊ะ ตลกๆ
+  else if (k==="pop"){ beep(880,0,.05,"sine",.06); }
+  else if (k==="drop"){ beep(330,0,.08,"triangle",.08); }
   else if (k==="alarm"){ for (let i=0;i<4;i++) beep(i%2?660:880,i*.25,.2,"sawtooth",.09); }   // สัญญาณเตือนหมดเวลา
   else if (k==="chest"){ [523,659,784,1047].forEach((f,i)=>beep(f,i*.1,.25,"triangle",.1)); }
 }
