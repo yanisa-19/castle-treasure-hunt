@@ -57,6 +57,15 @@ ol.lb li.me{color:var(--gold);font-weight:700}
 .chest{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
 .box{background:var(--stone2);font-size:2.4rem;padding:16px 0;border:3px solid var(--torch)}
 .box:disabled{border-color:transparent}
+.scene{position:relative;height:210px;margin:10px 0;background:linear-gradient(#2b2150,#3b3060);border-radius:14px;overflow:hidden}
+.tower{position:absolute;left:50%;bottom:0;width:70px;height:170px;margin-left:-35px;background:#5a4d8a;border:3px solid #150f26;border-bottom:0}
+.tower::before{content:"";position:absolute;top:-14px;left:-6px;right:-6px;height:14px;background:repeating-linear-gradient(90deg,#5a4d8a 0 12px,transparent 12px 20px)}
+.tower::after{content:"";position:absolute;top:50px;left:24px;width:16px;height:26px;background:#150f26;border-radius:8px 8px 0 0}
+.princess{position:absolute;left:50%;top:0;margin-left:-22px;font-size:2.6rem;line-height:1}
+.princess.saved{animation:descend 3.5s ease-in-out forwards}
+.princess.stuck{animation:waving 1s ease-in-out infinite}
+@keyframes descend{0%{transform:translate(0,0)}60%{transform:translate(0,160px)}100%{transform:translate(95px,160px)}}
+@keyframes waving{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
 .hide{display:none}
 @media (prefers-color-scheme:light){} /* castle theme is intentionally always dark */
 .mute{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:8px;z-index:10;background:#150f26;font-size:1.3rem;padding:8px 12px}
@@ -89,6 +98,7 @@ ol.lb li.me{color:var(--gold);font-weight:700}
   <p>ปราสาทโบราณซ่อนสมบัติไว้! ใช้ความรู้เรื่อง <b>Present Simple (Negative)</b> ผ่านทั้ง 4 ด่านเพื่อเปิดหีบสมบัติ</p>
   <p class="hint">ตอบแต่ละข้อภายใน 10 วินาที ตอบผิดไม่เป็นไร! จะมีคำใบ้ให้ทุกข้อ แล้วไปลุยข้อต่อไปได้เลย</p>
   <p class="hint">🎁 ตอบถูกติดกัน 2 ข้อ รับสิทธิ์เปิดหีบสมบัติสุ่ม 1 กล่อง จะเจอกล่องเปล่า คะแนน ×2 หรือขโมยแต้มเพื่อน!</p>
+  <p class="hint">👸 เป้าหมาย: ช่วยเจ้าหญิงที่ติดอยู่บนหอคอย! ตอบถูกเกิน 50% เจ้าหญิงจะลงมาได้ ถ้าไม่ถึง เจ้าหญิงจะติดอยู่บนหอคอยเหมือนเดิม</p>
   <label for="name" class="muted">ชื่อนักผจญภัย</label>
   <input id="name" maxlength="20" placeholder="พิมพ์ชื่อของเธอ" autocomplete="off">
   <button class="btn" id="goBtn">เริ่มผจญภัย</button>
@@ -123,6 +133,8 @@ ol.lb li.me{color:var(--gold);font-weight:700}
 <!-- RESULT -->
 <section id="end" class="card hide">
   <h1 id="eTitle"></h1>
+  <div class="scene" aria-hidden="true"><div class="tower"></div><div id="princess" class="princess">👸</div></div>
+  <p id="rescueMsg"><b></b></p>
   <p id="eSummary"></p>
   <h2>🏆 Leaderboard</h2>
   <ol class="lb" id="lb"></ol>
@@ -143,6 +155,7 @@ const BOSS_BONUS        = 100;  // โบนัสด่านบอส
 const BOSS_TARGET       = 3;    // ต้องตอบบอสถูกกี่ข้อถึงเปิดหีบ (ลดเป็น 2 ถ้าต้องการให้ง่ายขึ้น)
 const TYPE_EXTRA_TIME   = 0;    // วินาทีเพิ่มสำหรับข้อพิมพ์ตอบ (0 = ใช้ 10 วินาทีเท่ากันทุกข้อ)
 const CHEST_STREAK      = 2;    // ตอบถูกติดกันกี่ข้อ ถึงได้เปิดหีบสุ่ม
+const RESCUE_PERCENT    = 50;   // ช่วยเจ้าหญิงสำเร็จเมื่อตอบถูก"มากกว่า"ค่านี้ (เปอร์เซ็นต์)
 const STEAL_AMOUNT      = 30;   // แต้มที่ขโมยจากเพื่อนได้
 /* รูปแบบการตอบของแต่ละข้อ (เรียงข้อ 1-15)
    "drag" = ลากคำตอบไปวางในช่องว่าง, "type" = พิมพ์ตอบ, "choice" = เลือกตัวเลือก */
@@ -415,7 +428,7 @@ function next(){
 }
 
 function finish(){
-  stopMusic(); curMusic = -1; sfx("win");
+  stopMusic(); curMusic = -1;
   S.bossOpen = S.bossRight >= BOSS_TARGET;
   if (S.bossOpen) S.coins += BOSS_BONUS;
   saveScore();
@@ -429,6 +442,13 @@ function finish(){
     (S.gems?"<span class='reward'>💎 ×"+S.gems+"</span>":"") +
     (S.shields?"<span class='reward'>🛡️ ×"+S.shields+"</span>":"");
   renderBoard();
+  /* ช่วยเจ้าหญิง: สำเร็จเมื่อตอบถูกมากกว่า RESCUE_PERCENT % */
+  const pct = Math.round(S.correct / QUESTIONS.length * 100), saved = pct > RESCUE_PERCENT;
+  $("princess").className = "princess " + (saved ? "saved" : "stuck");
+  $("rescueMsg").textContent = saved
+    ? "👸 ช่วยเจ้าหญิงสำเร็จ! (ตอบถูก " + pct + "%) เจ้าหญิงลงจากหอคอยได้อย่างปลอดภัย"
+    : "🆘 ตอบถูก " + pct + "% ต้องมากกว่า " + RESCUE_PERCENT + "% ถึงจะช่วยได้ เจ้าหญิงยังติดอยู่บนหอคอย ลองใหม่อีกครั้งนะ!";
+  sfx(saved ? "win" : "no");
   show("end");
 }
 
