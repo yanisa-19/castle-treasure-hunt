@@ -69,6 +69,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 @keyframes redglow{from{opacity:.35}to{opacity:1}}
 body.alert::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:none;box-shadow:inset 0 0 90px #ff3b3b;animation:redglow .5s ease-in-out infinite alternate}
 .rank td:nth-child(3){white-space:nowrap}
+#boom{position:fixed;inset:0;z-index:11;display:flex;align-items:center;justify-content:center;pointer-events:none;background:radial-gradient(circle,#fff,#ffb347 35%,transparent 70%);animation:flash 1.5s ease-out forwards}
+#boom b{font-size:min(70vw,60vh);line-height:1;animation:bpop 1.5s ease-out forwards}
+@keyframes flash{0%{opacity:0}8%{opacity:1}100%{opacity:0}}
+@keyframes bpop{0%{transform:scale(.1) rotate(0)}30%{transform:scale(1) rotate(12deg)}100%{transform:scale(1.5) rotate(-8deg);opacity:0}}
+#ui.jolt{animation:jolt .12s linear 8}
+@keyframes jolt{0%,100%{transform:translate(0)}25%{transform:translate(-14px,8px)}50%{transform:translate(12px,-10px)}75%{transform:translate(-8px,-6px)}}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
 .card{max-width:560px;max-height:92vh;overflow:auto;touch-action:pan-y;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
@@ -190,7 +196,7 @@ function intro(){
 
 function render(){                      // แสดงโจทย์ข้อปัจจุบัน
   const m = MISSIONS[S.m], q = m.data[S.i];
-  S.locked = false; S.placed = ""; S.t0 = performance.now(); S.sec = TIME; warn(0);
+  S.locked = false; S.placed = ""; S.t0 = performance.now(); S.sec = TIME; warn(0); $("tb").parentElement.style.opacity = 1;
   $("hm").textContent = "M" + (S.m+1); $("hq").textContent = (S.i+1) + "/" + PER; hud();
   $("q").className = ""; $("q").innerHTML = q.q.replace("___", '<span id="slot" class="slot"></span>');
   $("clr").classList.toggle("hide", !m.letters);
@@ -210,7 +216,7 @@ function render(){                      // แสดงโจทย์ข้อ�
 }
 function warn(n){                       // n = วินาทีที่เหลือ (0 = ซ่อน)
   $("warn").classList.toggle("hide", !n); document.body.classList.toggle("alert", !!n);
-  if (n) $("warn").innerHTML = "<b>"+n+"</b><span>⚠️ ใกล้หมดเวลาแล้ว!</span>";
+  if (n) $("warn").innerHTML = "<b>💣 "+n+"</b><span>⚠️ ใกล้หมดเวลาแล้ว!</span>";
 }
 function tick(){                        // นับเวลา 15 วินาที
   if (S.locked) return;
@@ -223,7 +229,7 @@ function tick(){                        // นับเวลา 15 วินา
 }
 function submit(val){                   // ตรวจคำตอบ
   if (S.locked) return; S.locked = true;
-  warn(0);
+  warn(0); clearInterval(tm); $("tb").parentElement.style.opacity = .25;   // ตอบแล้ว = หยุดนับเวลา
   const m = MISSIONS[S.m], q = m.data[S.i], ok = val === q.a;
   if (ok){
     S.score += PTS; S.streak++; $("q").classList.add("ok"); burst(innerWidth/2, 140, "#3ddc84"); sfx("ok"); hero("jump"); hud();
@@ -275,10 +281,17 @@ function finish(){
     + rankTable(list, me.t),
     [["Next player ▶", () => { S.m = 0; S.score = 0; startScreen(); }]]);
 }
+/* ระเบิดหน้าจอ: แฟลชขาว + 💥 ใหญ่ + จอสั่น + พลุ + เสียงตูม แล้วค่อยแสดงหน้าเริ่มใหม่ */
+function explode(cb){
+  const b = document.createElement("div"); b.id = "boom"; b.innerHTML = "<b>💥</b>"; document.body.appendChild(b);
+  $("ui").classList.add("jolt"); sfx("boom");
+  for (let i=0;i<3;i++) burst(innerWidth/2, innerHeight/2);
+  setTimeout(() => { b.remove(); $("ui").classList.remove("jolt"); cb(); }, 1500);
+}
 function timeout(){                     // หมดเวลา: เตือน + เริ่ม Mission ใหม่ (ให้กำลังใจ)
-  S.locked = true; clearInterval(tm); cancelGrab(); warn(0); sfx("alarm");
+  S.locked = true; clearInterval(tm); cancelGrab(); warn(0); hero("shake");
   S.score = S.mStart;
-  showOv("<h2>⏰ หมดเวลา!</h2><p>ไม่เป็นไรนะ ทุกคนช้าได้ มาเริ่มด่านนี้ใหม่กัน สู้ๆ! 💪</p>", [["Try again ↺", ()=>{S.i=0; S.streak=0; render();}]]);
+  explode(() => showOv("<h2>💥 หมดเวลา!</h2><p>ไม่เป็นไรนะ ทุกคนช้าได้ มาเริ่มด่านนี้ใหม่กัน สู้ๆ! 💪</p>", [["Try again ↺", ()=>{S.i=0; S.streak=0; render();}]]));
 }
 function chest(){                       // หีบสมบัติ: แต้มเพื่อน / ไม่มีอะไร / แต้ม ×2
   S.streak = 0; hud(); clearInterval(tm); sfx("chest");
@@ -399,6 +412,12 @@ function audio(){ try { AC = AC || new (window.AudioContext||window.webkitAudioC
 function beep(f,t,d,ty,v){ if (!AC || !SND) return; const o=AC.createOscillator(), g=AC.createGain(), s=AC.currentTime+t;
   o.type = ty||"square"; o.frequency.value = f; g.gain.setValueAtTime(v||.07,s); g.gain.exponentialRampToValueAtTime(.0001,s+d);
   o.connect(g); g.connect(AC.destination); o.start(s); o.stop(s+d); }
+function noiseBoom(){                   // เสียงระเบิด (noise ที่ค่อยๆ ดับ)
+  if (!AC || !SND) return;
+  const n = AC.sampleRate*.9|0, buf = AC.createBuffer(1,n,AC.sampleRate), d = buf.getChannelData(0);
+  for (let i=0;i<n;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/n,2);
+  const src = AC.createBufferSource(), g = AC.createGain(); src.buffer = buf; g.gain.value = .5; src.connect(g); g.connect(AC.destination); src.start();
+}
 function slide(f1,f2,t,d,ty,v){ if (!AC || !SND) return; const o=AC.createOscillator(), g=AC.createGain(), s=AC.currentTime+t;
   o.type=ty; o.frequency.setValueAtTime(f1,s); o.frequency.exponentialRampToValueAtTime(f2,s+d); g.gain.setValueAtTime(v,s); g.gain.exponentialRampToValueAtTime(.0001,s+d);
   o.connect(g); g.connect(AC.destination); o.start(s); o.stop(s+d); }
@@ -420,6 +439,7 @@ $("mute").onclick = () => { SND = !SND; $("mute").textContent = SND ? "🔊" : "
 function sfx(k){
   if (k==="ok"){ const m = 1 + .12*Math.max(S.streak-1,0); [523,659,784,1047].forEach((f,i)=>beep(f*m,i*.07,.18,"triangle",.09)); }   // ยิ่งถูกติดกัน เสียงยิ่งสูง
   else if (k==="no"){ slide(420,140,0,.45,"sawtooth",.06); slide(300,120,.25,.4,"sawtooth",.05); }                                  // เสียงโบ๊ะ ตลกๆ
+  else if (k==="boom"){ noiseBoom(); slide(160,30,0,.8,"sine",.25); }
   else if (k==="pop"){ beep(880,0,.05,"sine",.06); }
   else if (k==="drop"){ beep(330,0,.08,"triangle",.08); }
   else if (k==="alarm"){ for (let i=0;i<4;i++) beep(i%2?660:880,i*.25,.2,"sawtooth",.09); }   // สัญญาณเตือนหมดเวลา
