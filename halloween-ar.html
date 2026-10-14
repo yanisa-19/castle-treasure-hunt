@@ -95,6 +95,12 @@ body.alert::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:non
 #items{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;min-height:30px}
 .it{font:inherit;font-weight:700;background:#3b2468;color:#fff;border:2px solid #ffd24a;border-radius:99px;padding:2px 12px;font-size:.9rem}
 .it:disabled{opacity:.45}.glow{box-shadow:0 0 0 4px #ffd24a,0 0 18px #ffd24a}
+.s3{position:fixed;inset:0;z-index:-1;height:auto;margin:0}
+#gl{width:100%;height:100%;display:block}
+#ui.ex #q,#ui.ex #hint,#ui.ex #notes,#ui.ex #typebox,#ui.ex #clr,#ui.ex #mon,#ui.ex .bar,#ui.ex #items{visibility:hidden}
+#act{position:fixed;z-index:6;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 88px);transform:translateX(-50%);white-space:nowrap}
+#dpad{position:fixed;z-index:6;left:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px}
+#dpad button{font:inherit;font-size:1.3rem;color:#fff;background:#3b2468cc;border:2px solid #c77dff;border-radius:12px}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
 .card{max-width:560px;max-height:92vh;overflow:auto;touch-action:pan-y;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
@@ -139,6 +145,8 @@ body.alert::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:non
 </div>
 <div id="toast" class="hide"></div>
 <div id="warn" class="hide"></div>
+<button class="b hide" id="act">🛒 Talk to Shopkeeper</button>
+<div id="dpad" class="hide"><button data-k="up" style="grid-area:1/2">▲</button><button data-k="left" style="grid-area:2/1">◀</button><button data-k="right" style="grid-area:2/3">▶</button><button data-k="down" style="grid-area:3/2">▼</button></div>
 <button class="b" id="mute" aria-label="Sound on/off">🔊</button>
 <div id="ov"><div class="card" id="ovc"></div></div>
 <canvas id="fx"></canvas>
@@ -212,7 +220,7 @@ const MON = [["👹","Ogre"],["🕷️","Giant Spider"],["🐺","Werewolf"],["�
 const SHOP = [["shield","🛡️","Shield","กันตอบผิด 1 ครั้ง (ไม่ต้องเริ่มสู้ใหม่)",60],["time","⏱️","Time Potion","เพิ่มเวลา +7 วินาที (กดใช้ตอนตอบ)",30],
               ["hint","💡","Hint Crystal","ตัวช่วยใบ้คำตอบ (กดใช้ตอนตอบ)",30],["sword","⚔️","Fire Sword","คะแนน/เหรียญ ×2 ตลอดการสู้มอนสเตอร์ตัวถัดไป",80]];
 let AV = CHARS[0];
-var G = {on:false, mode:"idle", act:null, at:0, dead:false, px:0, mx:2.6, ms:1, doors:[], opening:-1, ot:0, walk:null, nextPoke:0, poke:0};   // สถานะฉาก 3D (three.js)
+var G = {on:false, mode:"idle", act:null, at:0, dead:false, px:0, mx:2.6, ms:1, doors:[], opening:-1, ot:0, walk:null, nextPoke:0, poke:0, ents:[], keys:{}, pad:{}, target:null, busy:false, lt:0, bp:{x:0,z:0}, bm:{x:3.4,z:0}, look:null};   // สถานะฉาก 3D (three.js)
 function setAvatar(){ if (G.on) buildPlayer(); const h = $("hero"); h.children[0].style.setProperty("--c", AV[2]); h.children[0].querySelector(".fr").textContent = AV[0]; }
 
 /* หน้าต่างข้อความ btns = [[ข้อความปุ่ม, ฟังก์ชัน], ...] */
@@ -231,7 +239,7 @@ function startScreen(){
   menu(true); scene3d("idle");
   const go = cam => () => {
     PLAYER = $("pn").value.trim() || "Player " + (loadBoard().length + 1); audio(); if (cam && !handMode) startCam();
-    S.score = 0; S.coins = 0; S.inv = {shield:0,time:0,hint:0,sword:0}; S.sword = false; S.order = shuffle([0,1,2]); S.left = [0,1,2]; setAvatar(); startMusic(0); doors();
+    S.score = 0; S.coins = 0; S.inv = {shield:0,time:0,hint:0,sword:0}; S.sword = false; S.order = shuffle([0,1,2]); S.left = [0,1,2]; S.bossSpawned = false; newWorld(); setAvatar(); startMusic(0); doors();
   };
   showOv('<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 ประตู · 3 มอนสเตอร์ · 1 บอสใหญ่</p><p>เลือกตัวละครของคุณ</p><div class="chars" id="chars"></div><input id="pn" class="pn" maxlength="16" placeholder="Your name"><p>แล้วกดเริ่มเกม</p>',
     [["🖐️ เริ่มเกม (กล้อง)", go(true)], ["🖱️ เริ่มเกม (เมาส์/แตะ)", go(false)], ["📊 Ranking", viewRank]]);
@@ -240,13 +248,16 @@ function startScreen(){
 }
 
 /* ===== 2) ประตู: ประตูแต่ละบานซ่อน Mission ที่สุ่มไว้ เลือกแล้วไม่ซ้ำ ===== */
-function doors(){                       // ตัวละครเดินเข้าประตูเอง (สุ่มบานที่เหลือ) ไม่ต้องเลือก
+function doors(){                       // กลับสู่โลก 3D (เดินสำรวจอิสระ) · ถ้าผ่านครบ 3 ประตูแล้ว บอสจะปรากฏในแมพ
   warn(0); clearInterval(tm); S.locked = true;
-  if (!S.left.length) return bossIntro();
-  menu(true); scene3d("doors"); $("ov").classList.add("hide");
-  const d = S.left[Math.random() * S.left.length | 0]; S.m = S.order[d];
-  toast("🚶 กำลังเดินเข้า Door " + (d+1) + " ...");
-  walkIn(d, () => { S.left = S.left.filter(x => x !== d); fightIntro(S.m); });
+  if (!G.on){                           // ไม่มี three.js: สุ่มประตูให้อัตโนมัติ
+    if (!S.left.length) return bossIntro();
+    const d = S.left[Math.random() * S.left.length | 0]; S.m = S.order[d]; S.left = S.left.filter(x => x !== d); return fightIntro(S.m);
+  }
+  if (!S.left.length && !S.bossSpawned){ S.bossSpawned = true; spawnBoss(); toast("🐉 The Dragon Boss has appeared! Find it and touch it!"); }
+  else toast("🕹️ WASD / ลูกศร / ปุ่มบนจอ / คลิกที่พื้นเพื่อเดิน · แตะประตู 🚪 หรือมอนสเตอร์เพื่อสู้ · หา 🛒 พ่อค้า!");
+  $("ov").classList.add("hide"); scene3d("world"); menu(false); $("ui").classList.add("ex");
+  $("hm").textContent = "🗺️ WORLD"; $("hq").textContent = "🚪 " + S.left.length + " left"; hud();
 }
 function fightIntro(mi){
   const mo = MON[mi], m = MISSIONS[mi]; startMusic(mi); menu(true); scene3d("fight", mi);
@@ -412,6 +423,7 @@ function move(x,y){ P.x=x; P.y=y; if (S.grab){ S.grab.g.style.left=x+"px"; S.gra
 function pressAt(isHand){               // เริ่มจับ (หรือกดปุ่มถ้าเป็นโหมดมือ)
   const el = document.elementFromPoint(P.x,P.y); if (!el) return;
   const b = el.closest("button"); if (b){ if (isHand) b.click(); return; }
+  if (el.id === "gl"){ groundClick(P.x, P.y); return; }   // คลิก/จีบนิ้วที่พื้น = เดินไปตรงนั้น คลิกประตู/มอนสเตอร์/พ่อค้า = เดินไปหา
   const n = el.closest(".note");
   if (n && !S.locked && !n.classList.contains("used") && !S.grab){
     const g = n.cloneNode(true); g.classList.add("ghost"); document.body.appendChild(g);
@@ -563,26 +575,31 @@ function hero(cls){ if (G.on) act3d(cls === "jump" ? "hit" : "hurt"); const el =
     f.style.cssText = "left:"+(i*8.5+2)+"%;font-size:"+(1.4+(i%3)*.6)+"rem;animation-duration:"+(14+(i*7)%11)+"s;animation-delay:-"+(i*3)%14+"s"; document.body.appendChild(f); });
 })();
 /* =====================================================
-   ฉาก 3D จริงด้วย three.js (ตัวละคร มอนสเตอร์ ประตู สร้างจากรูปทรง 3D)
-   ถ้าโหลด three.js ไม่ได้ เกมจะใช้ตัวการ์ตูน CSS 3D ตัวเดิมแทนอัตโนมัติ
+   โลก 3D (three.js): เดินอิสระได้ทั้งแมพ — ผู้เล่น พ่อค้า และมอนสเตอร์ล้วนเดินไปมาได้
+   ควบคุม: WASD/ลูกศร · ปุ่มบนจอ · คลิก/จีบนิ้วที่พื้น · แตะประตู/มอนสเตอร์/พ่อค้า
+   ถ้าโหลด three.js ไม่ได้ เกมจะใช้โหมดเดิม (สุ่มประตูอัตโนมัติ + ตัวการ์ตูน CSS 3D)
    ===================================================== */
-function menu(on){ $("ui").classList.toggle("menu", on); }
+function menu(on){ const u = $("ui"); u.classList.toggle("menu", on); u.classList.remove("ex"); }
 const BX = (w,h,d) => new THREE.BoxGeometry(w,h,d), SP = r => new THREE.SphereGeometry(r,16,12), CY = (r,h) => new THREE.CylinderGeometry(r,r,h,10), CN = (r,h) => new THREE.ConeGeometry(r,h,10);
+const MS = [1,1.1,1.15,1.25], RMAP = 13, now3 = () => performance.now() * .001;
 function mk(g,geo,col,x,y,z){ const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({color:col})); m.position.set(x,y,z); g.add(m); return m; }
 function eyes(g,y,z,sp,r,col){ [-1,1].forEach(k => { mk(g,SP(r),col||0xffffff,k*sp,y,z); mk(g,SP(r*.5),0x111111,k*sp,y,z+r*.7); }); }
 function emojiTex(e){ const c = document.createElement("canvas"); c.width = c.height = 96; const x = c.getContext("2d"); x.font = "72px serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(e,48,52); return new THREE.CanvasTexture(c); }
-function buildPlayer(){                 // ตัวผู้เล่น: ใช้สีและอีโมจิของตัวละครที่เลือก
-  if (G.pl) G.sc.remove(G.pl);
-  const g = new THREE.Group(), dark = new THREE.Color(AV[2]).multiplyScalar(.6);
+function lbl(text, y){                  // ป้ายชื่อลอยเหนือตัวละคร/ประตู
+  const c = document.createElement("canvas"); c.width = 256; c.height = 64; const x = c.getContext("2d");
+  x.fillStyle = "rgba(0,0,0,.6)"; x.fillRect(0,8,256,48); x.font = "bold 28px sans-serif"; x.fillStyle = "#fff"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(text,128,33);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), transparent:true, depthTest:false})); sp.scale.set(3,.75,1); sp.position.y = y; return sp;
+}
+function buildPlayer(){                 // ตัวผู้เล่น: สีและอีโมจิตามตัวละครที่เลือก
+  const old = G.pl, g = new THREE.Group(), dark = new THREE.Color(AV[2]).multiplyScalar(.6);
   mk(g,BX(.35,.8,.35),0x2a1a4a,-.25,.4,0); mk(g,BX(.35,.8,.35),0x2a1a4a,.25,.4,0);
   mk(g,BX(1,1,.6),dark,0,1.3,0); mk(g,BX(.3,.9,.3),AV[2],-.7,1.3,0); mk(g,BX(.3,.9,.3),AV[2],.7,1.3,0);
-  mk(g,BX(.12,1.3,.12),0xffd24a,1.05,1.6,.25); mk(g,BX(.5,.12,.12),0xffd24a,1.05,1.05,.25);
-  mk(g,SP(.62),AV[2],0,2.3,0);
-  const f = new THREE.Mesh(new THREE.PlaneGeometry(.9,.9), new THREE.MeshBasicMaterial({map:emojiTex(AV[0]),transparent:true})); f.position.set(0,2.3,.63); g.add(f);
-  G.pl = g; G.sc.add(g); scene3d(G.mode);
+  mk(g,BX(.12,1.3,.12),0xffd24a,1.05,1.6,.25); mk(g,BX(.5,.12,.12),0xffd24a,1.05,1.05,.25); mk(g,SP(.62),AV[2],0,2.3,0);
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(.9,.9), new THREE.MeshBasicMaterial({map:emojiTex(AV[0]), transparent:true})); f.position.set(0,2.3,.63); g.add(f);
+  if (old){ g.position.copy(old.position); g.rotation.copy(old.rotation); G.sc.remove(old); } else g.position.set(0,0,6);
+  g.add(lbl("YOU", 3.5)); G.pl = g; G.sc.add(g);
 }
-function buildMon(i){                   // มอนสเตอร์ 4 แบบ (Ogre, Spider, Werewolf, Dragon)
-  if (G.mon) G.sc.remove(G.mon);
+function monModel(i){                   // มอนสเตอร์ 4 แบบ (Ogre, Spider, Werewolf, Dragon) หันหน้าไปทาง +z
   const g = new THREE.Group();
   if (i === 0){ mk(g,BX(1.6,1.8,1),0x3fa34d,0,1.4,0); mk(g,BX(1.1,1,1),0x4cbf5c,0,2.8,0); mk(g,CN(.2,.6),0xffd24a,-.4,3.6,0); mk(g,CN(.2,.6),0xffd24a,.4,3.6,0);
     eyes(g,2.9,.5,.28,.16); mk(g,BX(.7,.2,.1),0x3a0d0d,0,2.45,.52); mk(g,BX(.5,1.4,.5),0x3fa34d,-1.1,1.5,0); mk(g,BX(.5,1.4,.5),0x3fa34d,1.1,1.5,0); }
@@ -594,75 +611,133 @@ function buildMon(i){                   // มอนสเตอร์ 4 แบ�
     mk(g,CN(.15,.5),0xffd24a,-.3,3.7,1.8); mk(g,CN(.15,.5),0xffd24a,.3,3.7,1.8); eyes(g,3.35,2.65,.28,.12,0xffe066);
     mk(g,BX(1.8,.1,1.4),0x8e2b20,-1.6,2.5,0).rotation.z = .6; mk(g,BX(1.8,.1,1.4),0x8e2b20,1.6,2.5,0).rotation.z = -.6;
     mk(g,CN(.4,2),0xc0392b,0,1.3,-2.2).rotation.x = -1.4; mk(g,BX(.4,1,.4),0x8e2b20,-.6,.5,.6); mk(g,BX(.4,1,.4),0x8e2b20,.6,.5,.6); }
-  G.ms = [1,1.1,1.15,1.25][i]; g.scale.setScalar(G.ms); g.rotation.y = -1.2; g.position.set(G.mx,0,0); G.mon = g; G.sc.add(g);
+  g.scale.setScalar(MS[i]); return g;
 }
-function buildDoors(){                  // ประตูที่เหลืออยู่ (ไม่รู้ว่าหลังประตูคือ Mission ไหน)
-  S.left.forEach(d => {
-    const g = new THREE.Group(), p = new THREE.Group();
-    mk(g,BX(2,3.3,.3),0x5b3a1e,0,1.65,0); p.position.set(-.8,0,.2);
-    mk(p,BX(1.5,2.9,.15),[0x7c3aed,0xdb2777,0x0891b2][d],.75,1.5,0); mk(p,SP(.09),0xffd24a,1.2,1.4,.12); g.add(p); g.userData.panel = p;
-    const n = new THREE.Mesh(new THREE.PlaneGeometry(.9,.9), new THREE.MeshBasicMaterial({map:emojiTex(String(d+1)),transparent:true})); n.position.set(0,3.9,0); g.add(n);
-    g.position.set((d-1)*3.2,0,-1.5); G.sc.add(g); G.doors[d] = g;
-  });
+function npcModel(){                    // พ่อค้า: เสื้อคลุมม่วง หมวกพ่อมด กระสอบของ
+  const g = new THREE.Group();
+  mk(g,CY(.7,1.6),0x6a3fb5,0,.8,0); mk(g,SP(.45),0xf2c9a0,0,2,0); mk(g,CY(.8,.1),0x4a2a8a,0,2.35,0); mk(g,CN(.55,1.1),0x4a2a8a,0,2.95,0);
+  mk(g,SP(.5),0x8a6038,.7,.7,-.4); eyes(g,2.05,.38,.17,.08); return g;
 }
-function scene3d(mode, mi){             // เปลี่ยนฉาก: idle / doors / fight
+function doorModel(d){
+  const g = new THREE.Group(), p = new THREE.Group();
+  mk(g,BX(2,3.3,.3),0x5b3a1e,0,1.65,0); p.position.set(-.8,0,.2);
+  mk(p,BX(1.5,2.9,.15),[0x7c3aed,0xdb2777,0x0891b2][d],.75,1.5,0); mk(p,SP(.09),0xffd24a,1.2,1.4,.12); g.add(p); g.userData.panel = p;
+  g.add(lbl("🚪 Door " + (d+1), 4.2)); g.position.set((d-1)*6,0,-10); return g;
+}
+function rpos(R){ const a = Math.random()*6.283, r = Math.sqrt(Math.random())*R; return [Math.cos(a)*r, Math.sin(a)*r]; }
+function addEnt(model, kind, mi, sp, name, ly){      // ตัวละครที่เดินเล่นได้อิสระในแมพ
+  const g = new THREE.Group(); g.add(model); g.add(lbl(name, ly)); const p = rpos(RMAP-2); g.position.set(p[0],0,p[1]); G.sc.add(g);
+  G.ents.push({g, kind, mi, sp, tx:p[0], tz:p[1], wait:Math.random()*2, ph:Math.random()*6});
+}
+function newWorld(){                    // เริ่มโลกใหม่: ประตู + มอนสเตอร์ที่เดินเล่น + พ่อค้า
+  if (!G.on) return;
+  G.ents.forEach(e => G.sc.remove(e.g)); G.ents = []; G.doors.forEach(d => d && G.sc.remove(d)); G.doors = [];
+  S.left.forEach(d => { const g = doorModel(d); G.sc.add(g); G.doors[d] = g; });
+  S.left.forEach(d => { const mi = S.order[d]; addEnt(monModel(mi), "mon", mi, 1 + Math.random()*.6, MON[mi][0]+" "+MON[mi][1], 4.6); });
+  addEnt(npcModel(), "npc", -1, 1.2, "🛒 Shopkeeper", 3.9);
+  if (G.pl) G.pl.position.set(0,0,6);
+}
+function spawnBoss(){ addEnt(monModel(3), "mon", 3, 1.6, "🐉 BOSS", 6); const e = G.ents[G.ents.length-1]; e.g.position.set(0,0,-3); }
+function startMission(mi){              // แตะประตู หรือชนมอนสเตอร์ = เริ่มต่อสู้ Mission นั้น
+  G.busy = true;
+  if (mi === 3){ G.ents = G.ents.filter(e => { if (e.mi === 3) G.sc.remove(e.g); return e.mi !== 3; }); return bossIntro(); }
+  const d = S.order.indexOf(mi); S.left = S.left.filter(x => x !== d);                     // ประตูและมอนสเตอร์ของ Mission นี้หายไปจากแมพ
+  if (G.doors[d]){ G.sc.remove(G.doors[d]); G.doors[d] = null; }
+  G.ents = G.ents.filter(e => { if (e.mi === mi) G.sc.remove(e.g); return e.mi !== mi; });
+  S.m = mi; fightIntro(mi);
+}
+function scene3d(mode, mi){             // world = สำรวจ · fight = ต่อสู้ (กล้องถอยมาเห็นสองฝั่ง) · idle = หน้าเริ่ม/จบ
   if (!G.on || !G.pl) return;
-  G.mode = mode; G.dead = false; G.act = null; G.opening = -1; G.walk = null; G.nextPoke = now3() + 1.5;
-  if (G.mon){ G.sc.remove(G.mon); G.mon = null; } G.doors.forEach(d => d && G.sc.remove(d)); G.doors = [];
-  if (mode === "doors"){ buildDoors(); G.px = 0; G.pl.position.z = 3.4; G.pl.rotation.y = .2; }
-  else if (mode === "fight"){ buildMon(mi); G.px = -2.6; G.pl.position.z = 0; G.pl.rotation.y = 1.2; }
-  else { G.px = 0; G.pl.position.z = 0; }
-  G.pl.position.x = G.px;
+  G.mode = mode; G.dead = false; G.act = null; G.opening = -1;
+  if (G.mon){ G.sc.remove(G.mon); G.mon = null; }
+  G.ents.forEach(e => e.g.visible = mode !== "fight"); $("dpad").classList.toggle("hide", mode !== "world"); $("act").classList.add("hide");
+  G.pl.scale.setScalar(1);
+  if (mode === "fight"){
+    G.bp = {x:G.pl.position.x, z:G.pl.position.z}; G.bm = {x:G.bp.x + 3.4, z:G.bp.z};
+    G.mon = monModel(mi); G.ms = MS[mi]; G.mon.rotation.y = -1.2; G.mon.position.set(G.bm.x,0,G.bm.z); G.sc.add(G.mon);
+    G.pl.rotation.y = 1.2; G.nextPoke = now3() + 1.5;
+  } else if (mode === "idle"){ G.pl.position.set(0,0,0); G.bp = {x:0,z:0}; G.bm = {x:0,z:0}; }
+  else { G.busy = false; G.target = null; }
 }
-const now3 = () => performance.now() * .001;
-function act3d(type){ if (!G.on) return; if (type === "die"){ G.dead = true; } G.act = type; G.at = now3(); }   // hit=ผู้เล่นโจมตี hurt=มอนสเตอร์โจมตี die=มอนสเตอร์พ่ายแพ้
-function openDoor(d, cb){ if (!G.on || !G.doors[d]){ cb(); return; } G.opening = d; G.ot = now3(); setTimeout(cb, 850); }
-function size3(){ const h = $("s3"); if (!G.on || !h.clientWidth) return; G.r.setSize(h.clientWidth, h.clientHeight, false); G.cam.aspect = h.clientWidth / h.clientHeight; G.cam.updateProjectionMatrix(); }
-function walkIn(d, cb){                // ตัวละครเดินไปที่ประตู ประตูเปิด แล้วเดินเข้าไป
-  if (!G.on || !G.doors[d]){ setTimeout(cb, 900); return; }
-  G.walk = {d, cb, t0: now3()};
+function act3d(type){ if (!G.on) return; if (type === "die") G.dead = true; G.act = type; G.at = now3(); }   // hit=ผู้เล่นโจมตี hurt=มอนสเตอร์โจมตี die=มอนสเตอร์พ่ายแพ้
+function size3(){ if (!G.on) return; G.r.setSize(innerWidth, innerHeight, false); G.cam.aspect = innerWidth / innerHeight; G.cam.fov = innerWidth < innerHeight ? 58 : 42; G.cam.updateProjectionMatrix(); }
+function groundClick(x, y){             // คลิกพื้น = เดินไปที่นั่น · คลิกประตู/มอนสเตอร์/พ่อค้า = เดินไปหา
+  if (!G.on || G.mode !== "world" || G.busy) return;
+  const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(x/innerWidth*2-1, -(y/innerHeight)*2+1), G.cam);
+  const objs = [...G.doors.filter(Boolean), ...G.ents.map(e => e.g)], hit = rc.intersectObjects(objs, true)[0];
+  if (hit){ let o = hit.object; while (o.parent && !objs.includes(o)) o = o.parent; G.target = {x:o.position.x, z:o.position.z + (G.doors.includes(o) ? 1 : 0)}; return; }
+  const ro = rc.ray.origin, rd = rc.ray.direction; if (Math.abs(rd.y) < 1e-4) return;
+  const t = -ro.y / rd.y; if (t > 0) G.target = {x:ro.x + rd.x*t, z:ro.z + rd.z*t};
+}
+function wander(e, dt, t){              // เดินเล่นสุ่ม: เลือกจุดหมาย เดินไป หยุดพัก แล้วเลือกใหม่
+  const g = e.g; if (e.wait > 0){ e.wait -= dt; g.position.y = 0; return; }
+  const dx = e.tx - g.position.x, dz = e.tz - g.position.z, d = Math.hypot(dx,dz);
+  if (d < .3){ e.wait = 1 + Math.random()*2.5; const p = rpos(RMAP-1); e.tx = p[0]; e.tz = p[1]; return; }
+  g.position.x += dx/d*e.sp*dt; g.position.z += dz/d*e.sp*dt; g.rotation.y = Math.atan2(dx,dz); g.position.y = Math.abs(Math.sin(t*6 + e.ph)) * .12;
+}
+function updateWorld(dt, t){
+  const pl = G.pl, K = G.keys, P2 = G.pad;
+  G.ents.forEach(e => wander(e, dt, t));
+  if (G.busy){ return; }
+  const kx = ((K.d||K.arrowright||P2.right)?1:0) - ((K.a||K.arrowleft||P2.left)?1:0), kz = ((K.s||K.arrowdown||P2.down)?1:0) - ((K.w||K.arrowup||P2.up)?1:0);
+  let vx = 0, vz = 0;
+  if (kx || kz){ const l = Math.hypot(kx,kz); vx = kx/l; vz = kz/l; G.target = null; }
+  else if (G.target){ const dx = G.target.x - pl.position.x, dz = G.target.z - pl.position.z, d = Math.hypot(dx,dz); if (d < .35) G.target = null; else { vx = dx/d; vz = dz/d; } }
+  const moving = vx || vz;
+  if (moving){ pl.position.x += vx*4.8*dt; pl.position.z += vz*4.8*dt; pl.rotation.y = Math.atan2(vx,vz);
+    const r = Math.hypot(pl.position.x, pl.position.z); if (r > RMAP){ pl.position.x *= RMAP/r; pl.position.z *= RMAP/r; } }
+  pl.position.y = moving ? Math.abs(Math.sin(t*10)) * .1 : 0;
+  let nearNpc = false;                  // ตรวจการชนกับสิ่งที่โต้ตอบได้
+  S.left.forEach(d => { const dr = G.doors[d]; if (!G.busy && dr && Math.hypot(pl.position.x-dr.position.x, pl.position.z-dr.position.z) < 1.7){
+    G.busy = true; G.opening = d; G.ot = t; setTimeout(() => startMission(S.order[d]), 750); } });
+  G.ents.forEach(e => { if (G.busy) return; const dist = Math.hypot(pl.position.x-e.g.position.x, pl.position.z-e.g.position.z);
+    if (e.kind === "mon" && dist < 2.2) startMission(e.mi); else if (e.kind === "npc" && dist < 2.8) nearNpc = true; });
+  $("act").classList.toggle("hide", !nearNpc || G.busy);
 }
 function loop3(){
   requestAnimationFrame(loop3);
-  const t = now3(), a = t - G.at, pl = G.pl, mo = G.mon;
-  const amp = {hit:3.4, hit2:1.3, hurt:3.4, hurt2:1.3}[G.act] || 0;
-  if (G.mode === "fight" && !G.dead && t > G.nextPoke && (!G.act || a > 1)){ G.act = G.poke++ % 2 ? "hit2" : "hurt2"; G.at = t; G.nextPoke = t + 2.6; }   // สู้กันตลอดระหว่างตอบ
-  if (pl){
-    if (G.walk){
-      const w = G.walk, u = t - w.t0, px = (w.d-1)*3.2, door = G.doors[w.d]; let x = px, z = .8, sc = 1, walking = true;
-      if (u < 1.6){ const p = u/1.6; x = px*p; z = 3.4 - 2.6*p; }
-      else if (u < 2.3) walking = false;
-      else { const p = Math.min((u-2.3)/.8, 1); z = .8 - 3*p; sc = 1 - .35*p; }
-      if (door && u > 1.6) door.userData.panel.rotation.y = -Math.min((u-1.6)/.7, 1) * 1.9;
-      pl.rotation.y = Math.PI; pl.scale.setScalar(sc); pl.position.set(x, walking ? Math.abs(Math.sin(t*9))*.1 : 0, z);
-      if (u > 3.1){ const cb = w.cb; G.walk = null; pl.scale.setScalar(1); cb(); }
-    } else {
-      pl.position.y = Math.abs(Math.sin(t*3)) * .08;
-      pl.position.x = G.px + ((G.act==="hit" || G.act==="hit2") && a<.6 ? Math.sin(a/.6*Math.PI)*amp : 0) + (G.act==="hurt" && a<.5 ? Math.sin(a*40)*.12 : 0);
-      if (G.mode === "idle") pl.rotation.y = t;
-    }
-  }
-  if (mo && !G.dead){ mo.position.y = Math.sin(t*2) * .12;
-    mo.position.x = G.mx + ((G.act==="hurt" || G.act==="hurt2") && a<.6 ? -Math.sin(a/.6*Math.PI)*amp : 0) + (G.act==="hit" && a<.5 ? Math.sin(a*40)*.18 + Math.sin(a/.5*Math.PI)*.6 : 0);
-    mo.rotation.z = G.act==="hit" && a<.5 ? Math.sin(a*30)*.25 : 0; }
-  if (mo && G.dead){ mo.scale.setScalar(Math.max(1 - a, .001) * G.ms); mo.rotation.y += .2; }
-  G.r.render(G.sc, G.cam);
+  const t = now3(), dt = Math.min(t - G.lt, .05), a = t - G.at, pl = G.pl, mo = G.mon; G.lt = t;
+  let cp, cl;
+  if (G.mode === "world"){ updateWorld(dt, t); cp = [pl.position.x, 8, pl.position.z + 10.5]; cl = [pl.position.x, 1.2, pl.position.z]; }
+  else if (G.mode === "fight"){
+    const amp = {hit:3.4, hit2:1.3, hurt:3.4, hurt2:1.3}[G.act] || 0, sw = Math.sin(t*.8) * .8;
+    if (!G.dead && t > G.nextPoke && (!G.act || a > 1)){ G.act = G.poke++ % 2 ? "hit2" : "hurt2"; G.at = t; G.nextPoke = t + 2.6; }   // สู้กันตลอดระหว่างตอบ
+    pl.position.set(G.bp.x + ((G.act==="hit" || G.act==="hit2") && a<.6 ? Math.sin(a/.6*Math.PI)*amp : 0) + (G.act==="hurt" && a<.5 ? Math.sin(a*40)*.12 : 0), Math.abs(Math.sin(t*3))*.08, G.bp.z + sw);
+    if (mo && !G.dead){ mo.position.set(G.bm.x + ((G.act==="hurt" || G.act==="hurt2") && a<.6 ? -Math.sin(a/.6*Math.PI)*amp : 0) + (G.act==="hit" && a<.5 ? Math.sin(a*40)*.18 + Math.sin(a/.5*Math.PI)*.6 : 0), Math.sin(t*2)*.12, G.bm.z - sw);
+      mo.rotation.z = G.act==="hit" && a<.5 ? Math.sin(a*30)*.25 : 0; }
+    if (mo && G.dead){ mo.scale.setScalar(Math.max(1 - a, .001) * G.ms); mo.rotation.y += .2; }
+    const bx = (G.bp.x + G.bm.x) / 2; cp = [bx, 3.2, G.bp.z + 11.5]; cl = [bx, 3.7, G.bp.z];
+  } else { G.ents.forEach(e => wander(e, dt, t)); pl.rotation.y = t; pl.position.y = Math.abs(Math.sin(t*3)) * .08; cp = [0, 3.2, 11.5]; cl = [0, 3.7, 0]; }
+  G.doors.forEach((d, i) => { if (d && G.opening === i) d.userData.panel.rotation.y = -Math.min((t - G.ot)/.7, 1) * 1.9; });
+  const k = 1 - Math.exp(-dt * 3.5), c = G.cam.position;                // กล้องไหลตามอย่างนุ่มนวล
+  c.x += (cp[0]-c.x)*k; c.y += (cp[1]-c.y)*k; c.z += (cp[2]-c.z)*k; G.look.x += (cl[0]-G.look.x)*k; G.look.y += (cl[1]-G.look.y)*k; G.look.z += (cl[2]-G.look.z)*k;
+  G.cam.lookAt(G.look); G.r.render(G.sc, G.cam);
 }
 (function init3D(){
   if (!window.THREE) return;
   let r; try { r = new THREE.WebGLRenderer({canvas:$("gl"), alpha:true, antialias:true}); } catch(e){ return; }
   document.querySelector(".stage").classList.add("hide"); $("s3").classList.remove("hide");
   r.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-  const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(38,1,.1,60);
-  cam.position.set(0,2.8,10); cam.lookAt(0,1.6,0);
-  sc.add(new THREE.HemisphereLight(0xcdb8ff,0x2a1650,1.15)); const dl = new THREE.DirectionalLight(0xffb36b,1.1); dl.position.set(3,6,6); sc.add(dl);
-  const gr = new THREE.Mesh(new THREE.CircleGeometry(10,40), new THREE.MeshLambertMaterial({color:0x35205c})); gr.rotation.x = -Math.PI/2; sc.add(gr);
-  const moon = new THREE.Mesh(new THREE.SphereGeometry(1.3,20,16), new THREE.MeshBasicMaterial({color:0xfff1b8})); moon.position.set(-6,7,-9); sc.add(moon);
-  for (let i=0;i<6;i++){ const g = new THREE.Group(); mk(g,BX(.7,1,.2),0x8a8aa8,0,.5,0); mk(g,SP(.35),0x8a8aa8,0,1,0).scale.set(1,.7,.3); g.position.set(-8+i*3.2,0,-5-(i%2)*1.5); sc.add(g); }   // ป้ายหลุมศพ
-  [[-5.5,-2],[5.5,-2],[-4,3],[4.6,3]].forEach(p => mk(sc,SP(.45),0xff8a1f,p[0],.38,p[1]).scale.y = .8);                                               // ฟักทอง
-  Object.assign(G, {on:true, r, sc, cam}); size3(); addEventListener("resize", size3);
-  buildPlayer(); requestAnimationFrame(loop3);
+  const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(42,1,.1,80);
+  sc.fog = new THREE.Fog(0x2a1650, 22, 48); cam.position.set(0,3.2,11.5);
+  sc.add(new THREE.HemisphereLight(0xcdb8ff,0x2a1650,1.15)); const dl = new THREE.DirectionalLight(0xffb36b,1.1); dl.position.set(4,8,6); sc.add(dl);
+  const gr = new THREE.Mesh(new THREE.CircleGeometry(22,48), new THREE.MeshLambertMaterial({color:0x35205c})); gr.rotation.x = -Math.PI/2; sc.add(gr);
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(2,20,16), new THREE.MeshBasicMaterial({color:0xfff1b8})); moon.position.set(-12,14,-24); sc.add(moon);
+  for (let i=0;i<14;i++){ const g = new THREE.Group(); mk(g,CY(.25,1.6),0x3a2412,0,.8,0); mk(g,CN(1.1,3),0x1f5d3a,0,2.8,0); const p = rpos(1); const a = i/14*6.283; g.position.set(Math.cos(a)*(16+i%3*1.5), 0, Math.sin(a)*(16+i%3*1.5)); sc.add(g); }   // ต้นไม้ล้อมแมพ
+  for (let i=0;i<14;i++){ const g = new THREE.Group(); mk(g,BX(.7,1,.2),0x8a8aa8,0,.5,0); mk(g,SP(.35),0x8a8aa8,0,1,0).scale.set(1,.7,.3); const p = rpos(RMAP+1); g.position.set(p[0],0,p[1]); g.rotation.y = Math.random()*6; sc.add(g); }   // ป้ายหลุมศพ
+  for (let i=0;i<8;i++){ const p = rpos(RMAP), q = mk(sc,SP(.45),0xff8a1f,p[0],.38,p[1]); q.scale.y = .8; }                                                                                          // ฟักทอง
+  Object.assign(G, {on:true, r, sc, cam, look:new THREE.Vector3(0,3.7,0), lt:now3()}); size3(); addEventListener("resize", size3);
+  buildPlayer(); S.order = shuffle([0,1,2]); S.left = [0,1,2]; newWorld(); scene3d("idle"); requestAnimationFrame(loop3);
 })();
+/* ปุ่มควบคุม: คีย์บอร์ด + ปุ่มลูกศรบนจอ + ปุ่มคุยกับพ่อค้า */
+addEventListener("keydown", e => { if (e.target.tagName === "INPUT") return; G.keys[e.key.toLowerCase()] = true; if (G.mode === "world" && e.key.startsWith("Arrow")) e.preventDefault(); });
+addEventListener("keyup", e => { G.keys[e.key.toLowerCase()] = false; });
+document.querySelectorAll("#dpad button").forEach(b => {
+  const k = b.dataset.k, on = v => () => { G.pad[k] = v; };
+  b.addEventListener("pointerdown", on(true)); b.addEventListener("pointerup", on(false)); b.addEventListener("pointerleave", on(false)); b.addEventListener("pointercancel", on(false));
+  b.addEventListener("click", e => { if (e.detail === 0){ G.pad[k] = true; setTimeout(() => G.pad[k] = false, 350); } });   // โหมดมือ: จีบนิ้วที่ปุ่ม = ก้าวสั้นๆ
+});
+$("act").onclick = () => { if (G.busy) return; G.busy = true; $("act").classList.add("hide"); shop(() => { G.busy = false; }); };
 
 startScreen();
 </script>
