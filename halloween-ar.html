@@ -62,6 +62,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 #clk span{background:#000c;border:2px solid #ff8a1f;border-radius:99px;padding:4px 14px;font-size:1.05rem;white-space:nowrap}
 @keyframes clkin{0%{transform:translate(-320%,-320%) scale(.2) rotate(-360deg);opacity:0}25%{transform:translate(-50%,-50%) scale(1.3);opacity:1}40%{transform:translate(-50%,-50%) scale(1)}85%{opacity:1}100%{transform:translate(-50%,-80%) scale(1);opacity:0}}
 @keyframes ring{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}}
+#warn{position:fixed;z-index:6;right:10px;top:calc(env(safe-area-inset-top,0px) + 64px);text-align:center;pointer-events:none;font-weight:700}
+#warn b{display:block;font-size:3.4rem;line-height:1;color:#ff6b6b;text-shadow:0 0 18px #ff3b3b;animation:beat .5s ease-in-out infinite alternate}
+#warn span{display:inline-block;background:#000c;border:2px solid #ff6b6b;border-radius:99px;padding:2px 12px;font-size:.9rem}
+@keyframes beat{from{transform:scale(.9)}to{transform:scale(1.25)}}
+@keyframes redglow{from{opacity:.35}to{opacity:1}}
+body.alert::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:none;box-shadow:inset 0 0 90px #ff3b3b;animation:redglow .5s ease-in-out infinite alternate}
+.rank td:nth-child(3){white-space:nowrap}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
 .card{max-width:560px;max-height:92vh;overflow:auto;touch-action:pan-y;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
@@ -102,6 +109,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
   <div class="stage" aria-hidden="true"><div id="hero" class="hero"></div></div>
 </div>
 <div id="toast" class="hide"></div>
+<div id="warn" class="hide"></div>
 <button class="b" id="mute" aria-label="Sound on/off">🔊</button>
 <div id="ov"><div class="card" id="ovc"></div></div>
 <canvas id="fx"></canvas>
@@ -176,13 +184,13 @@ function hud(){ $("hs").textContent = "⭐ " + S.score; $("hk").textContent = "�
 function toast(t){ $("toast").textContent = t; $("toast").classList.remove("hide"); setTimeout(()=>$("toast").classList.add("hide"), 4000); }
 
 function intro(){
-  const m = MISSIONS[S.m]; S.i = 0; S.streak = 0; S.mStart = S.score; S.locked = true; clearInterval(tm); startMusic(S.m);
+  const m = MISSIONS[S.m]; S.i = 0; S.streak = 0; S.mStart = S.score; S.locked = true; clearInterval(tm); warn(0); startMusic(S.m);
   showOv("<h2>🎃 Mission "+(S.m+1)+"</h2><h2>"+m.name+"</h2><p>"+m.how+"</p><p>"+(m.typed ? (handMode?"จีบนิ้วกดตัวอักษรบนคีย์บอร์ดหน้าจอ แล้วกดตรวจคำตอบ":"พิมพ์คำตอบแล้วกด Enter") : handMode?HAND:"ลากธนบัตรไปวางที่ช่องว่าง")+"</p>", [["Start!", render]]);
 }
 
 function render(){                      // แสดงโจทย์ข้อปัจจุบัน
   const m = MISSIONS[S.m], q = m.data[S.i];
-  S.locked = false; S.placed = ""; S.t0 = performance.now(); S.sec = TIME;
+  S.locked = false; S.placed = ""; S.t0 = performance.now(); S.sec = TIME; warn(0);
   $("hm").textContent = "M" + (S.m+1); $("hq").textContent = (S.i+1) + "/" + PER; hud();
   $("q").className = ""; $("q").innerHTML = q.q.replace("___", '<span id="slot" class="slot"></span>');
   $("clr").classList.toggle("hide", !m.letters);
@@ -200,16 +208,22 @@ function render(){                      // แสดงโจทย์ข้อ�
   items.forEach(([label,val,cls],ix) => { const n = document.createElement("div"); n.className = "note "+cls+" c"+(ix%5); n.textContent = label; n.dataset.v = val; box.appendChild(n); });
   clearInterval(tm); tm = setInterval(tick, 100);
 }
+function warn(n){                       // n = วินาทีที่เหลือ (0 = ซ่อน)
+  $("warn").classList.toggle("hide", !n); document.body.classList.toggle("alert", !!n);
+  if (n) $("warn").innerHTML = "<b>"+n+"</b><span>⚠️ ใกล้หมดเวลาแล้ว!</span>";
+}
 function tick(){                        // นับเวลา 15 วินาที
   if (S.locked) return;
   const left = TIME - (performance.now() - S.t0)/1000;
   $("tb").style.width = Math.max(left,0)/TIME*100 + "%";
   $("tb").style.background = left < 5 ? "linear-gradient(90deg,#ff6b6b,#ff8a1f)" : "linear-gradient(90deg,#3ddc84,#4cc9f0,#c77dff)";
-  if (left < 3 && Math.ceil(left) !== S.sec){ S.sec = Math.ceil(left); beep(990,0,.08); }
+  const sec = Math.ceil(left);          // 5 วินาทีสุดท้าย: แจ้งเตือนใกล้หมดเวลา
+  if (left > 0 && left <= 5){ warn(sec); if (sec !== S.sec){ S.sec = sec; beep(700 + (5-sec)*120, 0, .1, "square", .08); } } else warn(0);
   if (left <= 0) timeout();
 }
 function submit(val){                   // ตรวจคำตอบ
   if (S.locked) return; S.locked = true;
+  warn(0);
   const m = MISSIONS[S.m], q = m.data[S.i], ok = val === q.a;
   if (ok){
     S.score += PTS; S.streak++; $("q").classList.add("ok"); burst(innerWidth/2, 140, "#3ddc84"); sfx("ok"); hero("jump"); hud();
@@ -239,20 +253,30 @@ function next(){
 let PLAYER = "Player", memBoard = [];
 const esc = t => t.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
 function loadBoard(){ try { return JSON.parse(localStorage.getItem("hwBoard") || "[]"); } catch(e){ return memBoard; } }
+/* ตารางอันดับ: ทุกคนที่เล่น (สูงสุด 20 อันดับ) พร้อมคะแนน */
+function rankTable(list, mt){
+  const medal = ["🥇","🥈","🥉"];
+  return '<table class="rank"><tr><th>Rank</th><th>Player</th><th>Score</th></tr>' + list.slice(0,20).map((e,i) =>
+    "<tr"+(e.t===mt?' class="me"':"")+"><td>"+(medal[i]||(i+1))+"</td><td>"+esc(e.name)+"</td><td>"+e.score+" pts</td></tr>").join("") + "</table>";
+}
+function viewRank(){                    // ดูอันดับจากหน้าเริ่มเกม
+  const l = loadBoard();
+  showOv("<h1>📊 Ranking</h1>" + (l.length ? rankTable(l, 0) : "<p>No players yet</p>"),
+    [["◀ Back", startScreen], ["🗑️ Clear", () => { try { localStorage.removeItem("hwBoard"); } catch(e){} memBoard = []; startScreen(); }]]);
+}
 function finish(){
   stopMusic(); sfx("chest");
   const b = loadBoard(), me = {name:PLAYER, score:S.score, t:Date.now()};
   b.push(me); b.sort((x,y) => y.score - x.score || x.t - y.t);
   const list = b.slice(0,30); memBoard = list; try { localStorage.setItem("hwBoard", JSON.stringify(list)); } catch(e){}
   const place = list.findIndex(e => e.t === me.t) + 1, medal = ["🥇","🥈","🥉"];
-  const rows = list.slice(0,10).map((e,i) => "<tr"+(e.t===me.t?' class="me"':"")+"><td>"+(medal[i]||(i+1))+"</td><td>"+esc(e.name)+"</td><td>"+e.score+"</td></tr>").join("");
   const msg = S.score >= 150 ? "Amazing! You are a grammar wizard 🧙" : "Great job! Play again to collect more stars 💪";
   showOv("<h1>🏆 Final Ranking</h1><p>"+esc(PLAYER)+": place #"+(place||"-")+" · ⭐ "+S.score+" points</p><p>"+msg+"</p>"
-    + '<table class="rank"><tr><th>Rank</th><th>Player</th><th>Score</th></tr>'+rows+"</table>",
+    + rankTable(list, me.t),
     [["Next player ▶", () => { S.m = 0; S.score = 0; startScreen(); }]]);
 }
 function timeout(){                     // หมดเวลา: เตือน + เริ่ม Mission ใหม่ (ให้กำลังใจ)
-  S.locked = true; clearInterval(tm); cancelGrab(); sfx("alarm");
+  S.locked = true; clearInterval(tm); cancelGrab(); warn(0); sfx("alarm");
   S.score = S.mStart;
   showOv("<h2>⏰ หมดเวลา!</h2><p>ไม่เป็นไรนะ ทุกคนช้าได้ มาเริ่มด่านนี้ใหม่กัน สู้ๆ! 💪</p>", [["Try again ↺", ()=>{S.i=0; S.streak=0; render();}]]);
 }
@@ -422,7 +446,7 @@ function hero(cls){ const el = $("hero"); el.classList.remove("jump","shake"); v
 function startScreen(){
   const go = cam => () => { PLAYER = $("pn").value.trim() || "Player " + (loadBoard().length + 1); audio(); if (cam && !handMode) startCam(); intro(); };
   showOv('<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 Missions · 8 ข้อต่อ Mission · 15 วินาทีต่อข้อ</p><input id="pn" class="pn" maxlength="16" placeholder="Your name"><p>เลือกวิธีเล่น</p>',
-    [["🖐️ เล่นด้วยกล้อง (จับธนบัตรด้วยมือ)", go(true)], ["🖱️ เมาส์ / นิ้วแตะ", go(false)]]);
+    [["🖐️ เล่นด้วยกล้อง (จับธนบัตรด้วยมือ)", go(true)], ["🖱️ เมาส์ / นิ้วแตะ", go(false)], ["📊 Ranking", viewRank]]);
 }
 startScreen();
 </script>
