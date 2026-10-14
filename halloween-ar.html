@@ -75,6 +75,16 @@ body.alert::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:non
 @keyframes bpop{0%{transform:scale(.1) rotate(0)}30%{transform:scale(1) rotate(12deg)}100%{transform:scale(1.5) rotate(-8deg);opacity:0}}
 #ui.jolt{animation:jolt .12s linear 8}
 @keyframes jolt{0%,100%{transform:translate(0)}25%{transform:translate(-14px,8px)}50%{transform:translate(12px,-10px)}75%{transform:translate(-8px,-6px)}}
+#mon{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:2px}
+#me{font-size:3rem;line-height:1;display:inline-block;animation:bob 1.2s ease-in-out infinite}
+#me.hit{animation:hit .5s ease}
+.hp{width:min(46vw,200px);height:14px;background:#0008;border:2px solid #ff6b6b;border-radius:99px;overflow:hidden}
+.hp i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#ff6b6b,#ffd24a);transition:width .5s}
+@keyframes bob{50%{transform:translateY(-8px)}}
+@keyframes hit{0%,100%{transform:translateX(0)}25%{transform:translateX(-16px) rotate(-12deg);filter:brightness(2.2)}75%{transform:translateX(16px) rotate(12deg)}}
+.chars{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0}
+.ch{font:inherit;font-size:.8rem;color:#fff;background:#3b2468;border:3px solid var(--pur);border-radius:14px;padding:6px 10px;cursor:pointer}
+.ch b{display:block;font-size:2rem}.ch.sel{border-color:#ffd24a;background:#6a3fb5;transform:scale(1.1)}
 #clr{align-self:center}.hide{display:none!important}
 #ov{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#000a;padding:16px}
 .card{max-width:560px;max-height:92vh;overflow:auto;touch-action:pan-y;background:#2a1650;border:3px solid var(--pur);border-radius:20px;padding:22px;text-align:center;box-shadow:0 8px 0 #0b0614}
@@ -105,6 +115,7 @@ body.alert::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:non
 <div id="ui">
   <div id="hud"><b id="hm"></b><span id="hq"></span><span id="hs">⭐ 0</span><span id="hk"></span></div>
   <div class="bar"><i id="tb"></i></div>
+  <div id="mon"><span id="me"></span><div class="hp"><i id="hpb"></i></div></div>
   <div id="q"></div>
   <div id="hint"></div>
   <div id="notes"></div>
@@ -125,7 +136,10 @@ body.alert::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:non
    ส่วนตั้งค่า + ข้อมูลโจทย์ (ครูแก้ไขได้ที่นี่)
    ===================================================== */
 const TIME = 15;      // วินาทีต่อข้อ
-const PER = 8;        // ข้อต่อ Mission
+const BATTLE_Q = 5;   // ข้อต่อการสู้มอนสเตอร์ 1 ตัว (สุ่มจาก 8 ข้อของ Mission นั้น) ตอบผิด = เริ่มสู้ใหม่
+const BOSS_Q = 10;    // ข้อในด่านบอส (สุ่มจากประโยคทั้งหมดของทุก Mission)
+const BOSS_HEARTS = 3;// หัวใจของผู้เล่นในด่านบอส
+const BOSS_PTS = 20;  // คะแนนต่อข้อในด่านบอส
 const STREAK = 3;     // ตอบถูกติดกันกี่ข้อ ถึงเปิดหีบ
 const PTS = 10;       // คะแนนต่อข้อ
 const FRIEND_PTS = 30;// แต้มเพื่อนในหีบ
@@ -177,39 +191,77 @@ const MISSIONS = [
    ===================================================== */
 const $ = id => document.getElementById(id);
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];} return a; };
-const S = {m:0,i:0,score:0,streak:0,mStart:0,locked:true,placed:"",t0:0,grab:null,sec:0};
-let handMode = false, tm = null;
+const S = {m:0,i:0,q:[],score:0,streak:0,mStart:0,hearts:1,order:[],left:[],locked:true,placed:"",t0:0,grab:null,sec:0};
+let handMode = false, tm = null, PLAYER = "Player", memBoard = [];
+/* ตัวละครให้เลือก [อีโมจิ, ชื่อ, สีหัว 3D] และมอนสเตอร์ของแต่ละ Mission (ตัวสุดท้ายคือบอส) */
+const CHARS = [["🧛","Vampire","#7c3aed"],["🧙","Witch","#16a34a"],["🎃","Pumpkin","#ff8a1f"],["👻","Ghost","#9ca3af"],["🧟","Zombie","#65a30d"],["💀","Skeleton","#e5e7eb"]];
+const MON = [["👹","Ogre"],["🕷️","Giant Spider"],["🐺","Werewolf"],["🐉","Dragon Boss"]];
+let AV = CHARS[0];
+function setAvatar(){ const h = $("hero"); h.children[0].style.setProperty("--c", AV[2]); h.children[0].querySelector(".fr").textContent = AV[0]; }
 
-/* หน้าต่างข้อความ (เริ่มเกม/อธิบาย/หีบ/จบเกม) btns = [[ข้อความปุ่ม, ฟังก์ชัน], ...] */
+/* หน้าต่างข้อความ btns = [[ข้อความปุ่ม, ฟังก์ชัน], ...] */
 function showOv(html, btns){
   $("ovc").innerHTML = html + '<div class="row" id="orow"></div>';
   btns.forEach(([t,fn]) => { const b = document.createElement("button"); b.className="b"; b.textContent=t; b.onclick=()=>{ $("ov").classList.add("hide"); fn(); }; $("orow").appendChild(b); });
   $("ov").classList.remove("hide");
 }
-function hud(){ $("hs").textContent = "⭐ " + S.score; $("hk").textContent = "🔥".repeat(S.streak); }
+function hud(){ $("hs").textContent = "⭐ " + S.score; $("hk").textContent = (S.m===3 ? "❤️".repeat(S.hearts)+" " : "") + "🔥".repeat(S.streak); }
 function toast(t){ $("toast").textContent = t; $("toast").classList.remove("hide"); setTimeout(()=>$("toast").classList.add("hide"), 4000); }
+const howTo = m => m.typed ? (handMode ? "จีบนิ้วกดตัวอักษรบนคีย์บอร์ดหน้าจอ แล้วกดตรวจคำตอบ" : "พิมพ์คำตอบแล้วกด Enter") : (handMode ? HAND : "ลากธนบัตรไปวางที่ช่องว่าง");
 
-function intro(){
-  const m = MISSIONS[S.m]; S.i = 0; S.streak = 0; S.mStart = S.score; S.locked = true; clearInterval(tm); warn(0); startMusic(S.m);
-  showOv("<h2>🎃 Mission "+(S.m+1)+"</h2><h2>"+m.name+"</h2><p>"+m.how+"</p><p>"+(m.typed ? (handMode?"จีบนิ้วกดตัวอักษรบนคีย์บอร์ดหน้าจอ แล้วกดตรวจคำตอบ":"พิมพ์คำตอบแล้วกด Enter") : handMode?HAND:"ลากธนบัตรไปวางที่ช่องว่าง")+"</p>", [["Start!", render]]);
+/* ===== 1) เลือกตัวละคร + เริ่มเกม ===== */
+function startScreen(){
+  const go = cam => () => {
+    PLAYER = $("pn").value.trim() || "Player " + (loadBoard().length + 1); audio(); if (cam && !handMode) startCam();
+    S.score = 0; S.order = shuffle([0,1,2]); S.left = [0,1,2]; setAvatar(); startMusic(0); doors();
+  };
+  showOv('<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 ประตู · 3 มอนสเตอร์ · 1 บอสใหญ่</p><p>เลือกตัวละครของคุณ</p><div class="chars" id="chars"></div><input id="pn" class="pn" maxlength="16" placeholder="Your name"><p>แล้วกดเริ่มเกม</p>',
+    [["🖐️ เริ่มเกม (กล้อง)", go(true)], ["🖱️ เริ่มเกม (เมาส์/แตะ)", go(false)], ["📊 Ranking", viewRank]]);
+  CHARS.forEach(c => { const b = document.createElement("button"); b.className = "ch" + (c === AV ? " sel" : ""); b.innerHTML = "<b>"+c[0]+"</b>"+c[1];
+    b.onclick = () => { AV = c; document.querySelectorAll(".ch").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); setAvatar(); }; $("chars").appendChild(b); });
 }
 
+/* ===== 2) ประตู: ประตูแต่ละบานซ่อน Mission ที่สุ่มไว้ เลือกแล้วไม่ซ้ำ ===== */
+function doors(){
+  warn(0); clearInterval(tm); S.locked = true;
+  if (!S.left.length) return bossIntro();
+  const n = S.left.length;
+  showOv("<h2>🚪 Choose a door!</h2><p>"+(n===3 ? "มี 3 ประตู มอนสเตอร์อยู่หลังบานไหนนะ? สุ่มเลือกเลย!" : n===2 ? "เหลือ 2 ประตู เลือกอีกบาน!" : "เหลือประตูสุดท้ายแล้ว!")+"</p><p>⭐ "+S.score+"</p>",
+    S.left.map(d => ["🚪 Door " + (d+1), () => { S.left = S.left.filter(x => x !== d); S.m = S.order[d]; fightIntro(S.m); }]));
+}
+function fightIntro(mi){
+  const mo = MON[mi], m = MISSIONS[mi]; startMusic(mi);
+  showOv("<h1>"+mo[0]+" "+mo[1]+" appears!</h1><h2>"+m.name+"</h2><p>"+m.how+"</p><p>⚔️ ตอบถูกทุกข้อเพื่อชนะ ตอบผิดต้องเริ่มสู้ใหม่!</p><p>"+howTo(m)+"</p>", [["Fight! ⚔️", () => fight(mi)]]);
+}
+function bossIntro(){
+  S.m = 3; startMusic(2);
+  showOv("<h1>🐉 Dragon Boss!</h1><p>คำถามจากทุก Mission มารวมกัน ทั้งลากธนบัตร เรียงตัวอักษร และเขียนตอบ!</p><p>คุณมีหัวใจ ❤️❤️❤️ ตอบผิดเสียหัวใจ 1 ดวง</p>", [["Fight! ⚔️", () => fight(3)]]);
+}
+
+/* ===== 3) การต่อสู้: สุ่มคำถามใหม่ทุกครั้งที่เริ่มสู้ ===== */
+function fight(mi){
+  S.m = mi; S.i = 0; S.streak = 0; S.mStart = S.score; S.hearts = mi===3 ? BOSS_HEARTS : 1;
+  const pool = mi===3 ? MISSIONS.flatMap((m,k) => m.data.map(q => ({...q, mi:k}))) : MISSIONS[mi].data.map(q => ({...q, mi}));
+  S.q = shuffle(pool).slice(0, mi===3 ? BOSS_Q : BATTLE_Q);
+  $("me").textContent = MON[mi][0]; render();
+}
+function setHp(done){ $("hpb").style.width = (S.q.length - S.i - (done?1:0)) / S.q.length * 100 + "%"; }
 function render(){                      // แสดงโจทย์ข้อปัจจุบัน
-  const m = MISSIONS[S.m], q = m.data[S.i];
+  const q = S.q[S.i], m = MISSIONS[q.mi];
   S.locked = false; S.placed = ""; S.t0 = performance.now(); S.sec = TIME; warn(0); $("tb").parentElement.style.opacity = 1;
-  $("hm").textContent = "M" + (S.m+1); $("hq").textContent = (S.i+1) + "/" + PER; hud();
+  $("hm").textContent = S.m===3 ? "BOSS" : "M" + (S.m+1); $("hq").textContent = (S.i+1) + "/" + S.q.length; hud(); setHp(false);
   $("q").className = ""; $("q").innerHTML = q.q.replace("___", '<span id="slot" class="slot"></span>');
   $("clr").classList.toggle("hide", !m.letters);
   $("hint").textContent = m.hint + (m.letters ? " · คำนี้มี "+q.a.length+" ตัว เริ่มด้วย "+q.a[0] : "");
   const typed = !!m.typed; $("typebox").classList.toggle("hide", !typed); $("notes").classList.toggle("hide", typed);
   const box = $("notes"); box.innerHTML = "";
-  if (typed){                           // โหมดเขียนตอบ (Mission 3)
+  if (typed){                           // โหมดเขียนตอบ
     $("opt").textContent = "ตัวเลือก: " + q.o.join("  /  "); $("kb").classList.toggle("hide", !handMode);
     const a = $("ans"); a.readOnly = handMode; a.value = ""; if (!handMode) setTimeout(()=>a.focus(), 50);
     clearInterval(tm); tm = setInterval(tick, 100); return;
   }
   let items;
-  if (m.letters){ items = q.a.split(""); for (let k=0;k<5;k++){ const s = shuffle(items); items = s; if (s.join("") !== q.a) break; } items = items.map(l=>[l,l,"tile"]); }
+  if (m.letters){ items = q.a.split(""); for (let k=0;k<5;k++){ items = shuffle(items); if (items.join("") !== q.a) break; } items = items.map(l=>[l,l,"tile"]); }
   else items = shuffle(m.opts || q.o.map(t=>[t,t])).map(o=>[o[0],o[1],""]);
   items.forEach(([label,val,cls],ix) => { const n = document.createElement("div"); n.className = "note "+cls+" c"+(ix%5); n.textContent = label; n.dataset.v = val; box.appendChild(n); });
   clearInterval(tm); tm = setInterval(tick, 100);
@@ -218,29 +270,52 @@ function warn(n){                       // n = วินาทีที่เห
   $("warn").classList.toggle("hide", !n); document.body.classList.toggle("alert", !!n);
   if (n) $("warn").innerHTML = "<b>💣 "+n+"</b><span>⚠️ ใกล้หมดเวลาแล้ว!</span>";
 }
-function tick(){                        // นับเวลา 15 วินาที
+function tick(){                        // นับเวลา + เตือน 5 วินาทีสุดท้าย
   if (S.locked) return;
   const left = TIME - (performance.now() - S.t0)/1000;
   $("tb").style.width = Math.max(left,0)/TIME*100 + "%";
   $("tb").style.background = left < 5 ? "linear-gradient(90deg,#ff6b6b,#ff8a1f)" : "linear-gradient(90deg,#3ddc84,#4cc9f0,#c77dff)";
-  const sec = Math.ceil(left);          // 5 วินาทีสุดท้าย: แจ้งเตือนใกล้หมดเวลา
+  const sec = Math.ceil(left);
   if (left > 0 && left <= 5){ warn(sec); if (sec !== S.sec){ S.sec = sec; beep(700 + (5-sec)*120, 0, .1, "square", .08); } } else warn(0);
   if (left <= 0) timeout();
 }
+function hitMon(){ const e = $("me"); e.classList.add("hit"); setTimeout(() => e.classList.remove("hit"), 500); setHp(true); }
 function submit(val){                   // ตรวจคำตอบ
-  if (S.locked) return; S.locked = true;
-  warn(0); clearInterval(tm); $("tb").parentElement.style.opacity = .25;   // ตอบแล้ว = หยุดนับเวลา
-  const m = MISSIONS[S.m], q = m.data[S.i], ok = val === q.a;
+  if (S.locked) return; S.locked = true; warn(0); clearInterval(tm); $("tb").parentElement.style.opacity = .25;
+  const q = S.q[S.i], m = MISSIONS[q.mi], ok = val === q.a;
   if (ok){
-    S.score += PTS; S.streak++; $("q").classList.add("ok"); burst(innerWidth/2, 140, "#3ddc84"); sfx("ok"); hero("jump"); hud();
+    S.score += S.m===3 ? BOSS_PTS : PTS; S.streak++; $("q").classList.add("ok"); burst(innerWidth/2, 140); sfx("ok"); hero("jump"); hitMon(); hud();
     setTimeout(() => { if (S.streak >= STREAK) chest(); else next(); }, 900);
   } else {
     S.streak = 0; hud(); sfx("no"); hero("shake"); clockWarn(Math.max(0, TIME-(performance.now()-S.t0)/1000));
     const shown = m.opts ? m.opts.find(o=>o[1]===q.a)[0] : q.a;
-    showOv("<h2>🤔 เกือบแล้ว!</h2><p>"+q.why+"</p><p>✔ คำตอบ: <b>"+shown+"</b></p><p>ไม่เป็นไรนะ ลองข้อต่อไปได้เลย 💪</p>", [["Next ▶", next]]);
+    fail("<h2>🤔 เกือบแล้ว!</h2><p>"+q.why+"</p><p>✔ คำตอบ: <b>"+shown+"</b></p>");
   }
 }
-/* ตอบผิด: นาฬิกา ⏰ ลอยเข้ามาเตือนเวลา (พร้อมเสียงติ๊กต็อก) */
+/* ตอบผิด/หมดเวลา: มอนสเตอร์ปกติ = เริ่มสู้ใหม่ทันที · บอส = เสียหัวใจ 1 ดวง (หมด = เริ่มบอสใหม่) */
+function fail(html){
+  if (S.m===3 && --S.hearts > 0){ hud(); showOv(html+"<p>เสียหัวใจ 1 ดวง ❤️ เหลือ "+S.hearts+" ดวง สู้ต่อ!</p>", [["Next ▶", next]]); return; }
+  S.score = S.mStart; hud();
+  showOv(html+"<p>"+MON[S.m][0]+" ชนะรอบนี้ ไม่เป็นไรนะ มาเริ่มสู้ใหม่กัน สู้ๆ! 💪</p>", [["Restart ↺", () => fight(S.m)]]);
+}
+function next(){ S.i++; if (S.i < S.q.length) render(); else victory(); }
+function victory(){
+  clearInterval(tm); S.locked = true; sfx("chest"); for (let i=0;i<3;i++) burst(innerWidth/2, innerHeight/2);
+  if (S.m === 3) return finish();
+  showOv("<h1>🎉 "+MON[S.m][1]+" defeated!</h1><p>⭐ "+S.score+"</p><p>ไปเลือกประตูบานต่อไป!</p>", [["Next ▶", doors]]);
+}
+/* ระเบิดหน้าจอเมื่อหมดเวลา แล้วเข้าสู่การเริ่มใหม่ */
+function explode(cb){
+  const b = document.createElement("div"); b.id = "boom"; b.innerHTML = "<b>💥</b>"; document.body.appendChild(b);
+  $("ui").classList.add("jolt"); sfx("boom");
+  for (let i=0;i<3;i++) burst(innerWidth/2, innerHeight/2);
+  setTimeout(() => { b.remove(); $("ui").classList.remove("jolt"); cb(); }, 1500);
+}
+function timeout(){
+  S.locked = true; clearInterval(tm); cancelGrab(); warn(0); hero("shake");
+  explode(() => fail("<h2>💥 หมดเวลา!</h2><p>ไม่เป็นไรนะ ทุกคนช้าได้</p>"));
+}
+/* ตอบผิด: นาฬิกา ⏰ ลอยเข้ามาเตือนเวลา */
 function clockWarn(left){
   const old = $("clk"); if (old) old.remove();
   const d = document.createElement("div"); d.id = "clk";
@@ -248,61 +323,40 @@ function clockWarn(left){
   document.body.appendChild(d); setTimeout(() => d.remove(), 2600);
   [0,.25,.5,.75].forEach((t,i) => beep(i%2?900:1200,t,.07,"square",.05));
 }
-function next(){
-  S.i++;
-  if (S.i < PER) return render();
-  clearInterval(tm); S.locked = true;
-  if (S.m < MISSIONS.length-1) showOv("<h2>🎉 Mission "+(S.m+1)+" complete!</h2><p>⭐ "+S.score+"</p>", [["Next mission ▶", ()=>{S.m++; intro();}]]);
-  else finish();
-}
-/* ===== สรุปอันดับตอนจบ (ภาษาอังกฤษ) เก็บใน localStorage ของเครื่องนี้ ===== */
-let PLAYER = "Player", memBoard = [];
-const esc = t => t.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
-function loadBoard(){ try { return JSON.parse(localStorage.getItem("hwBoard") || "[]"); } catch(e){ return memBoard; } }
-/* ตารางอันดับ: ทุกคนที่เล่น (สูงสุด 20 อันดับ) พร้อมคะแนน */
-function rankTable(list, mt){
-  const medal = ["🥇","🥈","🥉"];
-  return '<table class="rank"><tr><th>Rank</th><th>Player</th><th>Score</th></tr>' + list.slice(0,20).map((e,i) =>
-    "<tr"+(e.t===mt?' class="me"':"")+"><td>"+(medal[i]||(i+1))+"</td><td>"+esc(e.name)+"</td><td>"+e.score+" pts</td></tr>").join("") + "</table>";
-}
-function viewRank(){                    // ดูอันดับจากหน้าเริ่มเกม
-  const l = loadBoard();
-  showOv("<h1>📊 Ranking</h1>" + (l.length ? rankTable(l, 0) : "<p>No players yet</p>"),
-    [["◀ Back", startScreen], ["🗑️ Clear", () => { try { localStorage.removeItem("hwBoard"); } catch(e){} memBoard = []; startScreen(); }]]);
-}
-function finish(){
-  stopMusic(); sfx("chest");
-  const b = loadBoard(), me = {name:PLAYER, score:S.score, t:Date.now()};
-  b.push(me); b.sort((x,y) => y.score - x.score || x.t - y.t);
-  const list = b.slice(0,30); memBoard = list; try { localStorage.setItem("hwBoard", JSON.stringify(list)); } catch(e){}
-  const place = list.findIndex(e => e.t === me.t) + 1, medal = ["🥇","🥈","🥉"];
-  const msg = S.score >= 150 ? "Amazing! You are a grammar wizard 🧙" : "Great job! Play again to collect more stars 💪";
-  showOv("<h1>🏆 Final Ranking</h1><p>"+esc(PLAYER)+": place #"+(place||"-")+" · ⭐ "+S.score+" points</p><p>"+msg+"</p>"
-    + rankTable(list, me.t),
-    [["Next player ▶", () => { S.m = 0; S.score = 0; startScreen(); }]]);
-}
-/* ระเบิดหน้าจอ: แฟลชขาว + 💥 ใหญ่ + จอสั่น + พลุ + เสียงตูม แล้วค่อยแสดงหน้าเริ่มใหม่ */
-function explode(cb){
-  const b = document.createElement("div"); b.id = "boom"; b.innerHTML = "<b>💥</b>"; document.body.appendChild(b);
-  $("ui").classList.add("jolt"); sfx("boom");
-  for (let i=0;i<3;i++) burst(innerWidth/2, innerHeight/2);
-  setTimeout(() => { b.remove(); $("ui").classList.remove("jolt"); cb(); }, 1500);
-}
-function timeout(){                     // หมดเวลา: เตือน + เริ่ม Mission ใหม่ (ให้กำลังใจ)
-  S.locked = true; clearInterval(tm); cancelGrab(); warn(0); hero("shake");
-  S.score = S.mStart;
-  explode(() => showOv("<h2>💥 หมดเวลา!</h2><p>ไม่เป็นไรนะ ทุกคนช้าได้ มาเริ่มด่านนี้ใหม่กัน สู้ๆ! 💪</p>", [["Try again ↺", ()=>{S.i=0; S.streak=0; render();}]]));
-}
-function chest(){                       // หีบสมบัติ: แต้มเพื่อน / ไม่มีอะไร / แต้ม ×2
+function chest(){                       // หีบสมบัติ: ตอบถูกติดกัน 3 ข้อ
   S.streak = 0; hud(); clearInterval(tm); sfx("chest");
   const prizes = shuffle(["friend","empty","x2"]);
   showOv("<h2>🎁 ตอบถูกติดกัน "+STREAK+" ข้อ!</h2><p>เลือกหีบสมบัติ 1 กล่อง</p>", prizes.map(p => ["🎁", () => {
     let msg;
     if (p === "friend"){ S.score += FRIEND_PTS; msg = "🤝 ได้แต้มเพื่อน +"+FRIEND_PTS+"!"; }
-    else if (p === "x2"){ S.score *= 2; msg = "✨ คะแนน ×2!"; }
+    else if (p === "x2"){ S.score += S.score - S.mStart; msg = "✨ คะแนนของการสู้นี้ ×2!"; }   // คูณเฉพาะแต้มที่ได้ในการสู้รอบนี้
     else msg = "💨 หีบว่าง ไม่เป็นไร ไปต่อกัน!";
     hud(); sfx("chest"); showOv("<h2>"+msg+"</h2><p>⭐ "+S.score+"</p>", [["Continue ▶", next]]);
   }]));
+}
+
+/* ===== 4) อันดับ (ภาษาอังกฤษ) เก็บใน localStorage ของเครื่องนี้ ===== */
+const esc = t => t.replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+function loadBoard(){ try { return JSON.parse(localStorage.getItem("hwBoard") || "[]"); } catch(e){ return memBoard; } }
+function rankTable(list, mt){
+  const medal = ["🥇","🥈","🥉"];
+  return '<table class="rank"><tr><th>Rank</th><th>Player</th><th>Score</th></tr>' + list.slice(0,20).map((e,i) =>
+    "<tr"+(e.t===mt?' class="me"':"")+"><td>"+(medal[i]||(i+1))+"</td><td>"+(e.av||"")+" "+esc(e.name)+"</td><td>"+e.score+" pts</td></tr>").join("") + "</table>";
+}
+function viewRank(){
+  const l = loadBoard();
+  showOv("<h1>📊 Ranking</h1>" + (l.length ? rankTable(l, 0) : "<p>No players yet</p>"),
+    [["◀ Back", startScreen], ["🗑️ Clear", () => { try { localStorage.removeItem("hwBoard"); } catch(e){} memBoard = []; startScreen(); }]]);
+}
+function finish(){
+  stopMusic();
+  const b = loadBoard(), me = {name:PLAYER, av:AV[0], score:S.score, t:Date.now()};
+  b.push(me); b.sort((x,y) => y.score - x.score || x.t - y.t);
+  const list = b.slice(0,30); memBoard = list; try { localStorage.setItem("hwBoard", JSON.stringify(list)); } catch(e){}
+  const place = list.findIndex(e => e.t === me.t) + 1;
+  const msg = S.score >= 250 ? "Amazing! You defeated the Dragon Boss like a hero! 🐉🏆" : "You defeated the Dragon Boss! Play again for a higher score 💪";
+  showOv("<h1>🏆 Final Ranking</h1><p>"+AV[0]+" "+esc(PLAYER)+": place #"+(place||"-")+" · ⭐ "+S.score+" points</p><p>"+msg+"</p>"+rankTable(list, me.t),
+    [["Next player ▶", startScreen]]);
 }
 
 /* =====================================================
@@ -327,7 +381,7 @@ function release(){                     // ปล่อย: ถ้าอยู�
   if (P.x>r.left-p && P.x<r.right+p && P.y>r.top-p && P.y<r.bottom+p) place(G.n);
 }
 function place(n){ sfx("drop");
-  const m = MISSIONS[S.m], q = m.data[S.i];
+  const q = S.q[S.i], m = MISSIONS[q.mi];
   if (m.letters){ S.placed += n.dataset.v; n.classList.add("used"); $("slot").textContent = S.placed; if (S.placed.length === q.a.length) submit(S.placed); }
   else { $("slot").textContent = n.textContent; submit(n.dataset.v); }
 }
@@ -335,7 +389,7 @@ function place(n){ sfx("drop");
 const norm = s => s.toLowerCase().replace(/[’‘`´']/g,"").replace(/\s+/g," ").trim();
 function setAns(v){ $("ans").value = v; $("slot").textContent = v; }
 function check(){
-  if (S.locked) return; const q = MISSIONS[S.m].data[S.i], v = $("ans").value; if (!norm(v)) return;
+  if (S.locked) return; const q = S.q[S.i], v = $("ans").value; if (!norm(v)) return;
   submit(norm(v) === norm(q.a) ? q.a : v);
 }
 $("chk").onclick = check;
@@ -454,7 +508,7 @@ function sfx(k){
     ["fr","bk","lf","rt","tp","bt"].forEach(k => { const f = document.createElement("i"); f.className = "f "+k; cu.appendChild(f); });
     h.appendChild(cu);
   });
-  const face = h.children[0].querySelector(".fr"); face.textContent = "▾ᴗ▾"; face.style.cssText += ";display:flex;align-items:center;justify-content:center;font-size:13px;color:#2a1300";
+  const face = h.children[0].querySelector(".fr"); face.style.cssText += ";display:flex;align-items:center;justify-content:center;font-size:22px;color:#2a1300"; setAvatar();
 })();
 function hero(cls){ const el = $("hero"); el.classList.remove("jump","shake"); void el.offsetWidth; el.classList.add(cls); el.onanimationend = () => el.classList.remove("jump","shake"); }
 
@@ -463,11 +517,6 @@ function hero(cls){ const el = $("hero"); el.classList.remove("jump","shake"); v
   ["🎃","👻","🦇","🕷️","🍬","🌙","⭐","🧙","🍭","🕸️","💀","🍎"].forEach((e,i) => { const f = document.createElement("div"); f.className = "fl"; f.textContent = e;
     f.style.cssText = "left:"+(i*8.5+2)+"%;font-size:"+(1.4+(i%3)*.6)+"rem;animation-duration:"+(14+(i*7)%11)+"s;animation-delay:-"+(i*3)%14+"s"; document.body.appendChild(f); });
 })();
-function startScreen(){
-  const go = cam => () => { PLAYER = $("pn").value.trim() || "Player " + (loadBoard().length + 1); audio(); if (cam && !handMode) startCam(); intro(); };
-  showOv('<h1>🎃 Halloween Grammar Hunt AR</h1><p>Present Simple (negative) · 3 Missions · 8 ข้อต่อ Mission · 15 วินาทีต่อข้อ</p><input id="pn" class="pn" maxlength="16" placeholder="Your name"><p>เลือกวิธีเล่น</p>',
-    [["🖐️ เล่นด้วยกล้อง (จับธนบัตรด้วยมือ)", go(true)], ["🖱️ เมาส์ / นิ้วแตะ", go(false)], ["📊 Ranking", viewRank]]);
-}
 startScreen();
 </script>
 </body>
